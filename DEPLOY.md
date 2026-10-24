@@ -2,7 +2,7 @@
 
 ## Current release: Vercel + an existing server
 
-The source is the private repository `fluxpediawork/cutroom-studio`, branch `main`.
+The deployment source is the private repository `Rahulsharma6353/cutroom-studio`, branch `main`.
 GitHub Actions runs tests, all package type checks and a production frontend build.
 
 The owner chose an existing server for video processing. Do not create paid Render
