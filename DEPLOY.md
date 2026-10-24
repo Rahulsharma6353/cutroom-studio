@@ -1,34 +1,35 @@
 # Putting Cutroom Studio live
 
-## Current release: Vercel + Render
+## Current release: Vercel + an existing server
 
 The source is the private repository `fluxpediawork/cutroom-studio`, branch `main`.
 GitHub Actions runs tests, all package type checks and a production frontend build.
 
-The proposed `render.yaml` deploys the existing Docker backend in Singapore with
-2 CPU / 4 GB RAM and a 20 GB disk mounted at `/data`. As checked on 25 October 2026,
-that is $85/month compute plus $5/month storage, before usage and taxes. Deploying
-the Blueprint activates paid resources; obtain the account owner's cost approval first.
-See https://render.com/pricing and https://render.com/docs/disks.
+The owner chose an existing server for video processing. Do not create paid Render
+or Railway resources. The server hostname, deployment method and HTTPS API origin
+must be confirmed before the backend is deployed there.
 
-1. In Render, connect GitHub access to this private repository and deploy its Blueprint.
-   Keep the build context at the repository root and Dockerfile at `backend/Dockerfile`.
-2. The Blueprint generates `CUTROOM_PASSCODE`. Read it from the service's environment
-   settings and keep it private. Local Whisper downloads into the persistent disk;
-   wait for `Whisper ready.` in the logs before testing captions. AI provider keys are
-   optional; they must be entered only in the backend's environment settings.
+1. On the chosen server, build `backend/Dockerfile` with the repository root as the
+   Docker build context. Keep persistent data mounted at `/data`, expose the API
+   through HTTPS and route its health check to `/api/health`.
+2. Set `CUTROOM_PASSCODE` in the backend's environment and keep it private. Use
+   `STORAGE_DIR=/data/storage`, `WHISPER_DIR=/data/models/sherpa-onnx-whisper-turbo`,
+   `HOST=0.0.0.0`, and an available `PORT`. Start with `RENDER_CONCURRENCY=1`.
+   Local Whisper downloads into the persistent disk; wait for `Whisper ready.` in
+   the logs before testing captions. AI provider keys are optional and belong only
+   in the backend's environment settings.
 3. In Vercel, import the repository as `cutroom-studio`, with Root Directory `frontend`
    and inclusion of files outside that directory enabled. Use Node 22.
-4. Set `BACKEND_URL` and `NEXT_PUBLIC_API_URL` in Vercel to the Render service's HTTPS
+4. Set `BACKEND_URL` and `NEXT_PUBLIC_API_URL` in Vercel to the backend server's HTTPS
    origin, for Production and Preview. Redeploy after setting them: the upload origin
    is included in the browser bundle at build time.
 5. Verify the live health endpoint, studio passcode, a short real upload, analysis,
    a chat edit and an MP4 download. A deployed frontend with an offline backend is
    not a completed deployment of this editor.
 
-Free Render instances cannot attach the required persistent disk and have only
-512 MB RAM. They are not the proposed video-rendering configuration. Projects and
-job status still have the session/process limitations described in README.md.
+Projects and job status still have the session/process limitations described in
+README.md. Vercel's GitHub app must be granted access to this private repository
+before Git-based deployment can be connected.
 
 ## Original Railway deployment alternative
 
