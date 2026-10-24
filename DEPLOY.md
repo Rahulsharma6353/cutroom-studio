@@ -1,4 +1,36 @@
-# Putting Cutroom live
+# Putting Cutroom Studio live
+
+## Current release: Vercel + Render
+
+The source is the private repository `fluxpediawork/cutroom-studio`, branch `main`.
+GitHub Actions runs tests, all package type checks and a production frontend build.
+
+The proposed `render.yaml` deploys the existing Docker backend in Singapore with
+2 CPU / 4 GB RAM and a 20 GB disk mounted at `/data`. As checked on 25 October 2026,
+that is $85/month compute plus $5/month storage, before usage and taxes. Deploying
+the Blueprint activates paid resources; obtain the account owner's cost approval first.
+See https://render.com/pricing and https://render.com/docs/disks.
+
+1. In Render, connect GitHub access to this private repository and deploy its Blueprint.
+   Keep the build context at the repository root and Dockerfile at `backend/Dockerfile`.
+2. The Blueprint generates `CUTROOM_PASSCODE`. Read it from the service's environment
+   settings and keep it private. Local Whisper downloads into the persistent disk;
+   wait for `Whisper ready.` in the logs before testing captions. AI provider keys are
+   optional; they must be entered only in the backend's environment settings.
+3. In Vercel, import the repository as `cutroom-studio`, with Root Directory `frontend`
+   and inclusion of files outside that directory enabled. Use Node 22.
+4. Set `BACKEND_URL` and `NEXT_PUBLIC_API_URL` in Vercel to the Render service's HTTPS
+   origin, for Production and Preview. Redeploy after setting them: the upload origin
+   is included in the browser bundle at build time.
+5. Verify the live health endpoint, studio passcode, a short real upload, analysis,
+   a chat edit and an MP4 download. A deployed frontend with an offline backend is
+   not a completed deployment of this editor.
+
+Free Render instances cannot attach the required persistent disk and have only
+512 MB RAM. They are not the proposed video-rendering configuration. Projects and
+job status still have the session/process limitations described in README.md.
+
+## Original Railway deployment alternative
 
 Two parts, two hosts:
 

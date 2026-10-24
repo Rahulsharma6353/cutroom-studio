@@ -1,0 +1,32 @@
+# Proposed production backend. Creating this Blueprint starts paid compute:
+# 2c-4g is $85/month and the 20 GB disk is $5/month, before usage and taxes.
+# Deploy only after the account owner approves that recurring cost.
+services:
+  - type: web
+    name: cutroom-studio-api
+    runtime: docker
+    repo: https://github.com/fluxpediawork/cutroom-studio
+    branch: main
+    region: singapore
+    plan: 2c-4g
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    disk:
+      name: cutroom-data
+      mountPath: /data
+      sizeGB: 20
+    envVars:
+      - key: CUTROOM_PASSCODE
+        generateValue: true
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: STORAGE_DIR
+        value: /data/storage
+      - key: WHISPER_DIR
+        value: /data/models/sherpa-onnx-whisper-turbo
+      - key: RENDER_CONCURRENCY
+        value: "1"
