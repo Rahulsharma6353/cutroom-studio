@@ -1,0 +1,8 @@
+**/node_modules
+**/.next
+backend/storage
+backend/models/sherpa-onnx-whisper-turbo
+frontend
+!frontend/package.json
+**/*.tsbuildinfo
+**/.env

@@ -1,0 +1,26 @@
+// Self-hosted fonts, so the editor and the render server never depend on a font CDN.
+import '@fontsource/figtree/400.css';
+import '@fontsource/figtree/500.css';
+import '@fontsource/figtree/600.css';
+import '@fontsource/figtree/700.css';
+import '@fontsource/figtree/800.css';
+import '@fontsource/figtree/900.css';
+import '@fontsource/bricolage-grotesque/500.css';
+import '@fontsource/bricolage-grotesque/600.css';
+import '@fontsource/bricolage-grotesque/700.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/inter/800.css';
+import '@fontsource/inter/900.css';
+import '@fontsource/instrument-serif/400.css';
+import '@fontsource/instrument-serif/400-italic.css';
+import '@fontsource/bebas-neue/400.css';
+import '@fontsource/anton/400.css';
+import '@fontsource/mukta/500.css';
+import '@fontsource/mukta/700.css';
+import '@fontsource/mukta/800.css';
+import '@fontsource/pixelify-sans/400.css';
+import '@fontsource/pixelify-sans/500.css';
+import '@fontsource/pixelify-sans/600.css';
+import '@fontsource/pixelify-sans/700.css';

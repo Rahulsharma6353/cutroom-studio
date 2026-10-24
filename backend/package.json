@@ -1,0 +1,29 @@
+{
+  "name": "@cutroom/backend",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Cutroom API: uploads, analysis, AI director, render and Premiere export.",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "setup": "bash scripts/setup-models.sh"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.1.0",
+    "@cutroom/shared": "*",
+    "@hono/node-server": "^1.13.7",
+    "@remotion/bundler": "4.0.533",
+    "@remotion/renderer": "4.0.533",
+    "hono": "^4.6.14",
+    "react": "^19",
+    "react-dom": "^19",
+    "remotion": "4.0.533",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19"
+  }
+}

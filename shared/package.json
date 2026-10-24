@@ -1,0 +1,19 @@
+{
+  "name": "@cutroom/shared",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Timeline model, edit logic and the video frame renderer shared by the editor and the render server.",
+  "scripts": { "typecheck": "tsc --noEmit -p ." },
+  "peerDependencies": { "react": "^19" },
+  "dependencies": {
+    "@fontsource/anton": "^5.3.0",
+    "@fontsource/bebas-neue": "^5.3.0",
+    "@fontsource/bricolage-grotesque": "^5.3.0",
+    "@fontsource/figtree": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/mukta": "^5.3.0",
+    "@fontsource/pixelify-sans": "^5.3.0"
+  },
+  "devDependencies": { "@types/react": "^19" }
+}
