@@ -90,3 +90,15 @@ test('separate ripple ranges preserve speech between the cuts', () => {
     { start: 5, duration: 2 },
   ]);
 });
+
+test('own B-roll is cut in even without a transcript', async () => {
+  const { explainerBroll } = await import('@shared/explainer');
+  const aroll = { id: 'c1', trackId: 't-aroll', assetId: 'a1', label: 'me', start: 0, duration: 30, in: 0, status: 'ready' as const, hue: 1 };
+  const assets = [
+    { id: 'a1', name: 'me.mp4', kind: 'aroll' as const, origin: 'upload' as const, duration: 30, url: '/api/media/m_a', hue: 1 },
+    { id: 'b1', name: 'desk.mp4', kind: 'broll' as const, origin: 'upload' as const, duration: 10, url: '/api/media/m_b', hue: 2 },
+  ];
+  const out = explainerBroll({ clips: [aroll], words: [], assets });
+  assert.ok(out.length >= 3, `expected cutaways, got ${out.length}`);
+  assert.ok(out.every((c) => c.trackId === 't-broll' && c.assetId === 'b1' && c.start >= 3 && c.start + c.duration <= 30));
+});

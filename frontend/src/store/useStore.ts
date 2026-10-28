@@ -1,6 +1,6 @@
 'use client';
 import { create } from 'zustand';
-import { deleteMedia, online, startAnalysis, startBrollAnalysis, uploadFile, waitForJob, type Analysis, type BrollAnalysis } from '../lib/api';
+import { deleteMedia, fetchStock, online, startAnalysis, startBrollAnalysis, uploadFile, waitForJob, type Analysis, type BrollAnalysis } from '../lib/api';
 import { baseTimeline } from '@shared/autoEdit';
 import { askDirector } from '../lib/director-client';
 import { planEdit } from '@shared/director-mock';
@@ -277,15 +277,26 @@ export const useStore = create<State>((set, get) => {
     if (firstPass) {
       const s = get();
       // The brief's own asks ("add music", "captions off"…) ride along with the house recipe.
-      const plan = { prompt: [template.firstPass, brief].filter(Boolean).join('. '), selection: null, duration: duration(s), context: { words, pauses, clips, aspect: project.aspect } };
+      // B-roll in every first cut: the user's own cutaways when they gave some, stock footage matched to the script otherwise.
+      const ownBroll = s.assets.some((a) => a.kind === 'broll' && a.url && a.duration > 0.5);
+      const wantsBroll = /b-?roll|footage|stock|cutaway/i.test(template.firstPass + ' ' + brief);
+      const brollAsk = ownBroll || wantsBroll ? '' : 'add b-roll';
+      const plan = { prompt: [template.firstPass, brollAsk, brief].filter(Boolean).join('. '), selection: null, duration: duration(s), context: { words, pauses, clips, aspect: project.aspect } };
       // First pass runs locally for speed; the same ops would come from the server director.
       import('@shared/director-mock').then(({ planEdit }) => {
         const res = planEdit(plan);
+        // Own footage wins over stock: drop the stock placeholders and cut the uploads in instead.
+        if (ownBroll) res.ops = res.ops.filter((o) => !(o.op === 'insert_clip' && o.trackKind === 'broll' && o.origin === 'stock'));
         const csId = uid('cs');
         const before = snap(get());
         const out = applyOps(before, validateOps(res.ops, null, plan.duration), csId);
         let summary = res.summary;
         let captionsOn = true;
+        if (template.layout !== 'explainer' && ownBroll) {
+          const broll = explainerBroll({ clips: out.clips, words: out.words, assets: [...get().assets, ...out.assets] }).map((c) => ({ ...c, changeSetId: csId }));
+          out.clips = [...out.clips, ...broll];
+          if (broll.length) summary = `${summary.replace(/\.$/, '')}, cut in ${broll.length} of your B-roll shot${broll.length > 1 ? 's' : ''}`;
+        }
         if (template.layout === 'explainer') {
           // Explainer: B-roll on the beats, then every line, label stack, the look and the plate as their own clips.
           const assetsNow = [...get().assets, ...out.assets];
@@ -306,6 +317,46 @@ export const useStore = create<State>((set, get) => {
         }));
       });
     }
+  };
+
+  /** Stock B-roll: search Pexels for the clip's label, store it on the server, swap it in. One request per job. */
+  const stockStarted = new Set<string>();
+  let toldNoKey = false;
+  let stockQueue: Promise<unknown> = Promise.resolve();
+  const runStock = (job: Job) => {
+    if (stockStarted.has(job.id)) return;
+    stockStarted.add(job.id);
+    // One search at a time, so each cutaway knows which shots are already used and picks a different one.
+    stockQueue = stockQueue.then(() => {
+      const s = get();
+      const clip = s.clips.find((c) => c.id === job.clipId);
+      if (!clip) return;
+      const asp = s.project?.aspect ?? '9:16';
+      const orientation = asp === '16:9' || asp === '4:3' ? 'landscape' : asp === '1:1' ? 'square' : 'portrait';
+      const exclude = s.assets.map((a) => Number(a.name.match(/\(Pexels (\d+)\)/)?.[1])).filter((n) => n > 0);
+      return fetchStock({ query: clip.label, orientation, minDuration: clip.duration, exclude })
+        .then((r) => {
+          const st = get();
+          if (!st.clips.some((c) => c.id === clip.id)) return;
+          set({
+            assets: st.assets.map((a) => (a.id === clip.assetId ? { ...a, name: r.name, url: r.url, serverId: r.id, duration: r.duration, width: r.width, height: r.height, credit: r.credit } : a)),
+            clips: st.clips.map((c) => (c.id === clip.id ? { ...c, status: 'ready', in: 0, duration: Math.min(c.duration, r.duration) } : c)),
+            jobs: st.jobs.map((j) => (j.id === job.id ? { ...j, progress: 1, status: 'done' } : j)),
+          });
+        })
+        .catch((err: Error & { code?: string }) => {
+          const st = get();
+          // A cutaway with no footage would export as a blank card: take it off the timeline.
+          set({
+            clips: st.clips.filter((c) => c.id !== clip.id),
+            jobs: st.jobs.map((j) => (j.id === job.id ? { ...j, status: 'failed' } : j)),
+            ...(err.code === 'no-key' && !toldNoKey
+              ? { messages: [...st.messages, { id: uid('m'), role: 'editor' as const, text: `I couldn’t add stock B-roll: ${err.message} Until then, upload your own B-roll in Media and I’ll cut it in.` }] }
+              : {}),
+          });
+          if (err.code === 'no-key') toldNoKey = true;
+        });
+    });
   };
 
   /** Real pipeline: upload every file, analyse the A-roll, then make the first cut. */
@@ -648,6 +699,11 @@ export const useStore = create<State>((set, get) => {
       const finished: string[] = [];
       const jobs = s.jobs.map((j) => {
         if (j.status === 'done' || j.status === 'failed') return j;
+        if (j.type === 'stock' && online()) {
+          // Real stock search: the server finishes it; the bar creeps toward 90 % meanwhile.
+          runStock(j);
+          return { ...j, progress: Math.min(0.9, j.progress + dt / Math.max(4, j.eta * 4)), status: 'running' as const };
+        }
         const progress = Math.min(1, j.progress + dt / j.eta);
         if (progress >= 1) finished.push(j.clipId);
         return { ...j, progress, status: progress >= 1 ? ('done' as const) : ('running' as const) };

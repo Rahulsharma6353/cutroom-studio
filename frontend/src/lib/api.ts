@@ -95,3 +95,12 @@ export const deleteMedia = (id: string) => fetch(`/api/media/${id}`, { method: '
 export const startAnalysis = (id: string, language = 'auto') => post<{ jobId: string; steps: string[] }>('/api/analyze', { id, language });
 export const startBrollAnalysis = (id: string) => post<{ jobId: string; steps: string[] }>('/api/analyze', { id, light: true });
 export const startExport = (body: unknown) => post<{ jobId: string; steps: string[] }>('/api/export', body);
+
+export interface StockClip { id: string; url: string; name: string; duration: number; width?: number; height?: number; credit: string; pexelsId: number }
+/** Finds and stores a stock B-roll clip on the server. Errors carry the server's code ('no-key', 'not-found', 'failed'). */
+export async function fetchStock(body: { query: string; orientation: 'portrait' | 'landscape' | 'square'; minDuration: number; exclude: number[] }): Promise<StockClip> {
+  const res = await fetch('/api/stock', { method: 'POST', headers: { 'content-type': 'application/json', ...keyHeaders() }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(json.error ?? 'Stock search failed.'), { code: json.code ?? 'failed' });
+  return json as StockClip;
+}

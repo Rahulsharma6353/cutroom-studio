@@ -409,6 +409,8 @@ export function explainerBroll({ clips, words, assets }: Omit<ExplainerInput, 'r
     const e = Math.min(spokenEnd(ch.words.at(-1)!) + 0.3, chunks[i + 1]?.words[0].t ?? end);
     if (e - s >= 1) take(s, Math.min(e - s, 3.5));
   });
+  // No transcript to cut on: a cutaway every ~6 s after the hook, so the B-roll still lands.
+  if (!out.length) for (let t = 3; t < end - 2; t += 6) take(t, Math.min(3, end - t - 0.5));
   return out;
 }
 
