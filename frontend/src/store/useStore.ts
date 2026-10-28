@@ -110,6 +110,8 @@ interface State {
   openWizard: (files?: UploadedFile[]) => void;
   closeWizard: () => void;
   openProject: (id: string) => void;
+  /** Removes a project from the library (and its saved editor state). */
+  deleteProject: (id: string) => void;
   createProject: (r: WizardResult) => void;
   setAspect: (a: AspectRatio) => void;
   setStatus: (status: Project['status']) => void;
@@ -334,6 +336,14 @@ export const useStore = create<State>((set, get) => {
     wizardFiles: [],
     openWizard: (files = []) => set({ wizardOpen: true, wizardFiles: files }),
     closeWizard: () => set({ wizardOpen: false }),
+
+    deleteProject: (id) => {
+      saved.delete(id);
+      set((s) => ({
+        projects: s.projects.filter((p) => p.id !== id),
+        ...(s.project?.id === id ? { project: null, view: 'dashboard' as View } : {}),
+      }));
+    },
 
     openProject: (id) => {
       const project = get().projects.find((p) => p.id === id);

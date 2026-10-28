@@ -4,15 +4,15 @@ import { useEffect, useState } from 'react';
 export type Theme = 'light' | 'dark';
 import { THEME_KEY as KEY } from './theme-boot';
 
-/** Saved choice, else the system setting. */
+/** Saved choice, else dark: the studio is dark by default so footage reads true. */
 export function readTheme(): Theme {
   try {
     const t = localStorage.getItem(KEY);
     if (t === 'light' || t === 'dark') return t;
   } catch {
-    // storage blocked: fall through to the system setting
+    // storage blocked: fall through to the default
   }
-  return typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  return 'dark';
 }
 
 export function applyTheme(t: Theme) {

@@ -70,7 +70,7 @@ export function Wizard() {
     <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="wiz-title" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="dialog sheet">
         <div className="dialog-head">
-          <h2 id="wiz-title">New video</h2>
+          <h2 id="wiz-title">New <em>video</em></h2>
           <button className="icon-btn" onClick={close} aria-label="Close"><I.X /></button>
         </div>
 

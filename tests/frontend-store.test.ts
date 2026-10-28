@@ -132,3 +132,15 @@ test('an older response cannot alter a newer pending request in the same project
   assert.equal(useStore.getState().messages.at(-1)?.text, 'Kept the current edit.');
   assert.equal(useStore.getState().thinking, false);
 });
+
+test('deleteProject removes it from the library and leaves the editor if it was open', () => {
+  const [a, b] = projectIds;
+  useStore.setState({ project: useStore.getState().projects.find((p) => p.id === a)!, view: 'editor' });
+  useStore.getState().deleteProject(a);
+  const s = useStore.getState();
+  assert.deepEqual(s.projects.map((p) => p.id), [b]);
+  assert.equal(s.project, null);
+  assert.equal(s.view, 'dashboard');
+  useStore.getState().deleteProject(b);
+  assert.equal(useStore.getState().projects.length, 0);
+});

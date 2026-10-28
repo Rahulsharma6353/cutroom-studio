@@ -83,14 +83,30 @@ function BuildScreen() {
   const go = useStore((s) => s.go);
   const ref = useRef<HTMLHeadingElement>(null);
   useEffect(() => ref.current?.focus(), []);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (b.error) return;
+    const t0 = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [b.error]);
+  const overall = Math.min(1, (b.index + (b.progress ?? 0)) / b.steps.length);
+  const clock = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`;
   return (
     <div className="building" role="status" aria-live="polite">
       <div className="building-card">
-        <h2 ref={ref} tabIndex={-1}>{b.error ? 'The first cut stopped' : `Making the first cut of “${project?.title}”`}</h2>
+        <p className="building-kicker">{b.error ? 'Something went wrong' : `Step ${Math.min(b.index + 1, b.steps.length)} of ${b.steps.length} · ${project?.title ?? ''}`}</p>
+        <h2 ref={ref} tabIndex={-1}>{b.error ? <>The first cut <em>stopped.</em></> : <>Making your <em>first cut…</em></>}</h2>
+        {!b.error && (
+          <div className="build-overall">
+            <div><span>Overall · <span className="tnum">{clock}</span> elapsed</span><span className="tnum">{Math.round(overall * 100)}%</span></div>
+            <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(overall * 100)} aria-label="First cut progress"><i style={{ width: `${overall * 100}%` }} /></div>
+          </div>
+        )}
         <ul className="build-steps">
           {b.steps.map((s, i) => (
             <li key={s} className={i < b.index ? 'done' : i === b.index ? 'now' : ''}>
-              <b>{i < b.index ? <I.Check size={16} /> : i === b.index ? (b.error ? <I.X size={16} /> : <span className="spinner" />) : <span style={{ width: 6, height: 6, borderRadius: 9, background: 'currentColor', display: 'block' }} />}</b>
+              <b>{i < b.index ? <I.Check size={14} /> : i === b.index ? (b.error ? <I.X size={14} /> : <span className="spinner" />) : <span style={{ width: 6, height: 6, borderRadius: 9, background: 'currentColor', display: 'block' }} />}</b>
               <span style={{ flex: 1 }}>{s}</span>
               {i === b.index && !b.error && b.progress !== undefined && b.progress > 0 && <span className="tnum" style={{ color: 'var(--muted)', fontSize: 12.5 }}>{Math.round(b.progress * 100)}%</span>}
             </li>

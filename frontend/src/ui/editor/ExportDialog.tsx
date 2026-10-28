@@ -131,7 +131,7 @@ export function ExportDialog() {
     <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="exp-title" onMouseDown={(e) => e.target === e.currentTarget && phase !== 'rendering' && close()}>
       <div className="dialog" style={{ width: 'min(680px, 100%)' }}>
         <div className="dialog-head">
-          <h2 id="exp-title">{phase === 'settings' ? 'Export video' : phase === 'rendering' ? 'Exporting…' : 'Export ready'}</h2>
+          <h2 id="exp-title">{phase === 'settings' ? <>Export <em>your cut</em></> : phase === 'rendering' ? <>Exporting<em>…</em></> : <>Your export <em>is ready.</em></>}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close"><I.X /></button>
         </div>
 
