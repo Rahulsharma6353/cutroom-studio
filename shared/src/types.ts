@@ -13,6 +13,15 @@ export interface Track {
   optional?: boolean;
 }
 
+/** Per-track switches in the timeline header, like Premiere's eye, mute and lock toggles. */
+export interface TrackState {
+  hidden?: boolean;
+  muted?: boolean;
+  locked?: boolean;
+  /** Track volume in dB, added to every clip on the track. */
+  gainDb?: number;
+}
+
 export type AssetKind = 'aroll' | 'broll' | 'image' | 'graphic' | 'screen' | 'sfx' | 'music' | 'script';
 export type AssetOrigin = 'upload' | 'stock' | 'generated' | 'recorded' | 'library';
 
@@ -60,6 +69,8 @@ export interface Clip {
   jobId?: string;
   changeSetId?: string;
   zoom?: number; // punch-in scale, 1 = none
+  /** Clip volume in dB (0 = as recorded / library default, −60 = silent). Like Premiere's clip volume. */
+  gainDb?: number;
   graphic?: GraphicSpec;
   /** A line of text that is its own layer (explainer style): setup line or key line. */
   text?: TextSpec;

@@ -8,6 +8,23 @@ const base = (size = 16): SVGProps<SVGSVGElement> => ({
 });
 
 export const I = {
+  Cursor: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M5 3l14 8-6 1.5L10 19z" /></svg>),
+  Razor: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8 7.5L20 18M8 16.5L20 6" /></svg>),
+  Magnet: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M6 4v8a6 6 0 0012 0V4" /><path d="M6 8h3M15 8h3" /></svg>),
+  Eye: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="2.5" /></svg>),
+  EyeOff: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M2 12s3.5-6 10-6c2 0 3.7.6 5 1.4M22 12s-3.5 6-10 6c-2 0-3.7-.6-5-1.4" /><path d="M4 20L20 4" /></svg>),
+  Speaker: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M4 9h3l5-4v14l-5-4H4z" /><path d="M16 9a4 4 0 010 6" /></svg>),
+  SpeakerOff: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M4 9h3l5-4v14l-5-4H4z" /><path d="M16 9l5 6M21 9l-5 6" /></svg>),
+  Lock: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></svg>),
+  Unlock: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 017.5-2" /></svg>),
+  MarkIn: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M9 4v16M9 4h5M9 20h5" /></svg>),
+  MarkOut: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M15 4v16M15 4h-5M15 20h-5" /></svg>),
+  ZoomIn: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5M8.5 11h5M11 8.5v5" /></svg>),
+  ZoomOut: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5M8.5 11h5" /></svg>),
+  Fit: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" /></svg>),
+  Ripple: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M4 7h7M4 17h16M14 7h6" /><path d="M11 4v6M14 4v6" /></svg>),
+  SkipBack: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M6 5v14M19 5l-9 7 9 7z" /></svg>),
+  SkipFwd: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M18 5v14M5 5l9 7-9 7z" /></svg>),
   Logo: ({ size = 16, ...p }: P) => (<svg {...base(size)} {...p} strokeWidth={2.4}><path d="M6 4l12 8-12 8z" fill="currentColor" stroke="none" /><path d="M14 4h4M14 20h4" /></svg>),
   Home: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z" /></svg>),
   Grid: ({ size, ...p }: P) => (<svg {...base(size)} {...p}><rect x="4" y="4" width="6.5" height="9" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6" rx="1.5" /><rect x="4" y="16" width="6.5" height="4" rx="1.5" /><rect x="13.5" y="13" width="6.5" height="7" rx="1.5" /></svg>),

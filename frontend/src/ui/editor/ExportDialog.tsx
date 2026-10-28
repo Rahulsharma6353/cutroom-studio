@@ -1,4 +1,5 @@
 'use client';
+import { playableClips } from '@shared/util';
 import { useEffect, useRef, useState } from 'react';
 import { online, startExport, waitForJob } from '../../lib/api';
 import type { Word } from '@shared/types';
@@ -105,7 +106,7 @@ export function ExportDialog() {
     const burn = captions === 'Burned in' || captions === 'Both';
     try {
       const { jobId } = await startExport({
-        title: project.title, aspect: project.aspect, clips: s.clips, assets: s.assets, words: s.words,
+        title: project.title, aspect: project.aspect, clips: playableClips(s.clips, s.tracks), assets: s.assets, words: s.words,
         captions: { ...s.captions, enabled: s.captions.enabled && burn }, look: s.look,
         format, res, fps: Number(fps), quality, range: range === 'sel' && selection ? selection : null, duration: total,
         ...(isPremiere ? { folder } : {}),

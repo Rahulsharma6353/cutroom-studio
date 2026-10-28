@@ -92,6 +92,6 @@ export interface BrollAnalysis { duration: number; width?: number; height?: numb
 /** Deletes an upload on the server (best effort: a missing file is fine). */
 export const deleteMedia = (id: string) => fetch(`/api/media/${id}`, { method: 'DELETE', headers: keyHeaders() }).then(() => undefined, () => undefined);
 
-export const startAnalysis = (id: string) => post<{ jobId: string; steps: string[] }>('/api/analyze', { id });
+export const startAnalysis = (id: string, language = 'auto') => post<{ jobId: string; steps: string[] }>('/api/analyze', { id, language });
 export const startBrollAnalysis = (id: string) => post<{ jobId: string; steps: string[] }>('/api/analyze', { id, light: true });
 export const startExport = (body: unknown) => post<{ jobId: string; steps: string[] }>('/api/export', body);

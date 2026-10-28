@@ -68,7 +68,7 @@ function trackFaces(file: string): Promise<FaceSample[]> {
 
 export const ANALYZE_STEPS = ['Reading footage', 'Making a preview copy', 'Finding pauses and your face', 'Transcribing speech'];
 
-export async function startAnalysis(id: string) {
+export async function startAnalysis(id: string, language?: string) {
   const meta = await readMeta(id);
   if (!meta) throw new Error('not found');
 
@@ -104,7 +104,7 @@ export async function startAnalysis(id: string) {
     let transcript: Analysis['transcript'] = 'none';
     if (p.hasAudio && sttConfigured()) {
       try {
-        words = (await transcribe(mediaPath(id, 'audio'))) ?? [];
+        words = (await transcribe(mediaPath(id, 'audio'), language)) ?? [];
         transcript = 'speech';
       } catch (err) {
         console.error('[stt]', err);

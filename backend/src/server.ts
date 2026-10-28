@@ -4,6 +4,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { ASSETS } from './lib/paths';
+import { sttInfo } from './lib/stt';
 import * as analyze from './routes/analyze';
 import * as director from './routes/director';
 import * as exportRoute from './routes/export';
@@ -40,7 +41,7 @@ app.get('/api/jobs/:id', (c) => jobsId.GET(c.req.raw, params(c.req.param('id')))
 app.get('/api/media/:id', (c) => mediaId.GET(c.req.raw, params(c.req.param('id'))));
 app.delete('/api/media/:id', (c) => mediaId.DELETE(c.req.raw, params(c.req.param('id'))));
 app.get('/api/exports/:id', (c) => exportsId.GET(c.req.raw, params(c.req.param('id'))));
-app.get('/api/health', (c) => c.json({ ok: true, locked: !keyOk(c) }));
+app.get('/api/health', (c) => c.json({ ok: true, locked: !keyOk(c), stt: sttInfo() }));
 
 // Brand marks and sound effects: the renderer loads them from here, the editor through its proxy.
 const MIME: Record<string, string> = { '.png': 'image/png', '.svg': 'image/svg+xml', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.jpg': 'image/jpeg' };

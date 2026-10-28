@@ -17,7 +17,7 @@ const templateFor = (p: Pick<Project, 'templateId'>) => TEMPLATES.find((t) => t.
 const ANALYZE_STEPS = ['Reading footage', 'Making a preview copy', 'Finding pauses and your face', 'Transcribing speech'];
 import type {
   AspectRatio, Asset, AssetKind, CaptionSettings, Look, ChangeSet, ChatMessage, Clip, Job, Pause, Project,
-  ProjectSummary, Selection, TimelineSnapshot, Track, Word,
+  ProjectSummary, Selection, TimelineSnapshot, Track, TrackState, Word,
 } from '@shared/types';
 import { aspectOf, clamp, hashHue, timecode, uid } from '@shared/util';
 
@@ -56,6 +56,8 @@ export interface WizardResult {
   files: UploadedFile[];
   /** A chosen style (e.g. 'explainer'); the house style when unset. */
   templateId?: string;
+  /** Spoken language for speech-to-text: 'auto' or a Whisper code (en, hi, gu…). */
+  language?: string;
 }
 
 interface BuildStatus {
@@ -98,6 +100,12 @@ interface State {
   selectedClipIds: string[];
   pxPerSec: number;
   leftTab: LeftTab;
+  /** Timeline tool: select/move/trim, or razor (click a clip to cut it). */
+  tool: 'select' | 'razor';
+  /** Clips and the playhead snap to edit points while dragging. */
+  snapping: boolean;
+  /** Eye / mute / lock / volume per track id. */
+  tracks: Record<string, TrackState>;
   exportOpen: boolean;
   building: BuildStatus | null;
   sampleTranscript: boolean;
@@ -124,6 +132,18 @@ interface State {
   selectClip: (id: string, additive: boolean) => void;
   clearSelection: () => void;
   setPxPerSec: (n: number) => void;
+  setTool: (t: State['tool']) => void;
+  toggleSnapping: () => void;
+  setTrack: (id: string, patch: Partial<TrackState>) => void;
+  /** Clip volume in dB; call beginGesture first so a drag is one undo step. */
+  setClipGain: (id: string, db: number) => void;
+  /** Cut one clip at time t (razor tool). */
+  razorAt: (id: string, t: number) => void;
+  markIn: () => void;
+  markOut: () => void;
+  clearInOut: () => void;
+  /** Move the playhead to the previous or next cut. */
+  jumpEdit: (dir: -1 | 1) => void;
   setLeftTab: (t: LeftTab) => void;
   setExportOpen: (o: boolean) => void;
 
@@ -175,7 +195,7 @@ export function summarize(clips: Clip[], words: Word[], lastChange?: string): Pr
 }
 
 /** What a project's editor holds, kept for the session so reopening resumes the real edit. */
-type Saved = Pick<State, 'assets' | 'clips' | 'words' | 'pauses' | 'captions' | 'look' | 'jobs' | 'changeSets' | 'messages' | 'sampleTranscript'>;
+type Saved = Pick<State, 'assets' | 'clips' | 'words' | 'pauses' | 'captions' | 'look' | 'jobs' | 'changeSets' | 'messages' | 'sampleTranscript'> & { tracks?: Record<string, TrackState> };
 const saved = new Map<string, Saved>();
 
 /**
@@ -249,7 +269,7 @@ export const useStore = create<State>((set, get) => {
     project = { ...project, duration: Math.round(dur) };
     set((st) => ({ projects: st.projects.map((p) => (p.id === project.id ? project : p)) }));
     set({
-      project, assets: [aroll, ...extra], clips, words, pauses,
+      project, assets: [aroll, ...extra], clips, words, pauses, tracks: {},
       captions: captionsFromPreset(template.captionPreset, false), look: template.look,
       jobs: [], changeSets: [], messages: [], thinking: false, playhead: 0, playing: false, selection: null,
       selectedClipIds: [], past: [], future: [], view: 'editor', wizardOpen: false, sampleTranscript: !media,
@@ -289,7 +309,7 @@ export const useStore = create<State>((set, get) => {
   };
 
   /** Real pipeline: upload every file, analyse the A-roll, then make the first cut. */
-  const buildFromServer = async (projectIn: Project, brief: string, files: UploadedFile[], arollFile: UploadedFile) => {
+  const buildFromServer = async (projectIn: Project, brief: string, files: UploadedFile[], arollFile: UploadedFile, language = 'auto') => {
     let project = projectIn;
     const steps = ['Uploading footage', ...ANALYZE_STEPS, 'Making the first cut'];
     const setStep = (index: number, progress = 0) => set({ building: { steps, index, progress } });
@@ -309,7 +329,7 @@ export const useStore = create<State>((set, get) => {
         ),
       );
       const arollUp = uploaded[files.indexOf(arollFile)]!;
-      const { jobId } = await startAnalysis(arollUp.id);
+      const { jobId } = await startAnalysis(arollUp.id, language);
       // B-roll: shape and calm areas, so text over a cutaway lands in its quiet space too.
       const brollP = Promise.all(files.map(async (f, i) => {
         const up = uploaded[i];
@@ -348,7 +368,7 @@ export const useStore = create<State>((set, get) => {
     projects: restored?.projects ?? (() => { const sum = sampleSummary(); return SAMPLE_PROJECTS.map((p) => ({ ...p, summary: sum })); })(), project: null,
     assets: [], clips: [], words: [], pauses: [], captions: captionsFromPreset('bold-pop'), look: DEFAULT_LOOK,
     jobs: [], changeSets: [], messages: [], thinking: false,
-    playhead: 0, playing: false, selection: null, selectedClipIds: [], pxPerSec: 34,
+    playhead: 0, playing: false, selection: null, selectedClipIds: [], pxPerSec: 34, tool: 'select', snapping: true, tracks: {},
     leftTab: 'media', exportOpen: false, building: null, sampleTranscript: true,
     past: [], future: [],
 
@@ -356,8 +376,8 @@ export const useStore = create<State>((set, get) => {
       const s = get();
       if (view !== s.view) directorGeneration++;
       if (s.view === 'editor' && view !== 'editor' && s.project) {
-        const { assets, clips, words, pauses, captions, look, jobs, changeSets, messages, sampleTranscript } = s;
-        saved.set(s.project.id, { assets, clips, words, pauses, captions, look, jobs, changeSets, messages, sampleTranscript });
+        const { assets, clips, words, pauses, captions, look, jobs, changeSets, messages, sampleTranscript, tracks } = s;
+        saved.set(s.project.id, { assets, clips, words, pauses, captions, look, jobs, changeSets, messages, sampleTranscript, tracks });
         const project: Project = { ...s.project, summary: summarize(clips, words, (() => { const c = changeSets.filter((x) => x.status !== 'reverted').at(-1); return c ? (c.prompt === 'First cut' ? `First cut: ${c.summary.charAt(0).toLowerCase()}${c.summary.slice(1)}` : c.summary) : undefined; })()), duration: Math.round(duration(s)), updated: 'Just now', status: s.project.status === 'Draft' ? 'Editing' : s.project.status };
         set((st) => ({ projects: [project, ...st.projects.filter((p) => p.id !== project.id)], project }));
       }
@@ -385,7 +405,7 @@ export const useStore = create<State>((set, get) => {
       directorGeneration++;
       const keep = saved.get(id);
       if (keep) {
-        set({ ...keep, project, view: 'editor', thinking: false, playhead: 0, playing: false, selection: null, selectedClipIds: [], past: [], future: [], wizardOpen: false });
+        set({ tracks: {}, ...keep, project, view: 'editor', thinking: false, playhead: 0, playing: false, selection: null, selectedClipIds: [], past: [], future: [], wizardOpen: false });
         return;
       }
       const aroll: Asset = { id: uid('a'), name: 'Talking head, take 2', kind: 'aroll', origin: 'upload', duration: 40, hue: project.hue };
@@ -411,7 +431,7 @@ export const useStore = create<State>((set, get) => {
       set((s) => ({ projects: [project, ...s.projects], wizardOpen: false, view: 'editor', project, clips: [], assets: [], thinking: false }));
 
       if (online() && arollFile?.file) {
-        void buildFromServer(project, r.brief, files, arollFile);
+        void buildFromServer(project, r.brief, files, arollFile, r.language);
         return;
       }
 
@@ -447,7 +467,34 @@ export const useStore = create<State>((set, get) => {
         selectedClipIds: additive ? (s.selectedClipIds.includes(id) ? s.selectedClipIds.filter((x) => x !== id) : [...s.selectedClipIds, id]) : [id],
       })),
     clearSelection: () => set({ selection: null, selectedClipIds: [] }),
-    setPxPerSec: (n) => set({ pxPerSec: clamp(n, 12, 160) }),
+    setPxPerSec: (n) => set({ pxPerSec: clamp(n, 6, 240) }),
+    setTool: (tool) => set({ tool }),
+    toggleSnapping: () => set((s) => ({ snapping: !s.snapping })),
+    setTrack: (id, patch) => set((s) => ({ tracks: { ...s.tracks, [id]: { ...s.tracks[id], ...patch } } })),
+    setClipGain: (id, db) => set((s) => ({ clips: s.clips.map((c) => (c.id === id ? { ...c, gainDb: Math.round(clamp(db, -60, 15) * 10) / 10 } : c)) })),
+    razorAt: (id, t) => {
+      const s = get();
+      const c = s.clips.find((x) => x.id === id);
+      if (!c || s.tracks[c.trackId]?.locked || t <= c.start + 0.05 || t >= c.start + c.duration - 0.05) return;
+      record();
+      set((st) => ({
+        clips: st.clips.flatMap((x) => (x.id !== id ? [x] : [{ ...x, duration: t - x.start }, { ...x, id: uid('c'), start: t, in: x.in + (t - x.start), duration: x.start + x.duration - t }])),
+      }));
+    },
+    markIn: () => set((s) => {
+      const end = s.selection && s.selection.end > s.playhead + 0.05 ? s.selection.end : duration(s);
+      return end - s.playhead < 0.05 ? {} : { selection: { start: s.playhead, end }, selectedClipIds: [] };
+    }),
+    markOut: () => set((s) => {
+      const start = s.selection && s.selection.start < s.playhead - 0.05 ? s.selection.start : 0;
+      return s.playhead - start < 0.05 ? {} : { selection: { start, end: s.playhead }, selectedClipIds: [] };
+    }),
+    clearInOut: () => set({ selection: null }),
+    jumpEdit: (dir) => set((s) => {
+      const pts = [...new Set([0, duration(s), ...s.clips.filter((c) => c.trackId === TRACK_IDS.aroll || c.trackId === TRACK_IDS.broll).flatMap((c) => [c.start, c.start + c.duration])])].sort((a, b) => a - b);
+      const t = dir > 0 ? pts.find((p) => p > s.playhead + 0.01) : [...pts].reverse().find((p) => p < s.playhead - 0.01);
+      return t === undefined ? {} : { playhead: t };
+    }),
     setLeftTab: (leftTab) => set({ leftTab }),
     setExportOpen: (exportOpen) => set({ exportOpen, playing: false }),
 
@@ -468,7 +515,7 @@ export const useStore = create<State>((set, get) => {
     splitAtPlayhead: () => {
       const s = get();
       const t = s.playhead;
-      const targets = s.clips.filter((c) => t > c.start + 0.05 && t < c.start + c.duration - 0.05 && (s.selectedClipIds.length ? s.selectedClipIds.includes(c.id) : c.trackId === TRACK_IDS.aroll));
+      const targets = s.clips.filter((c) => !s.tracks[c.trackId]?.locked && t > c.start + 0.05 && t < c.start + c.duration - 0.05 && (s.selectedClipIds.length ? s.selectedClipIds.includes(c.id) : c.trackId === TRACK_IDS.aroll));
       if (!targets.length) return;
       record();
       set((st) => ({
@@ -483,7 +530,7 @@ export const useStore = create<State>((set, get) => {
       const s = get();
       if (s.selectedClipIds.length) {
         record();
-        set((st) => ({ clips: st.clips.filter((c) => !st.selectedClipIds.includes(c.id)), selectedClipIds: [] }));
+        set((st) => ({ clips: st.clips.filter((c) => !st.selectedClipIds.includes(c.id) || st.tracks[c.trackId]?.locked), selectedClipIds: [] }));
       } else if (s.selection) {
         record();
         const out = applyOps(snap(s), [{ op: 'ripple_delete', start: s.selection.start, end: s.selection.end }], uid('cs'));

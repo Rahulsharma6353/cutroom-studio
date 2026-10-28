@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Word } from '@shared/types';
@@ -12,17 +12,39 @@ import { MODELS, SCRIPTS, PYTHON } from './paths';
  */
 const FILLERS = new Set(['um', 'umm', 'uh', 'uhh', 'erm', 'er', 'hmm', 'ah', 'uhm', 'mm']);
 
-/** Local fallback model (scripts/setup-models.sh downloads it). */
-const WHISPER_DIR = path.resolve(process.env.WHISPER_DIR || path.join(MODELS, 'sherpa-onnx-whisper-turbo'));
-const localReady = () => existsSync(path.join(WHISPER_DIR, 'turbo-tokens.txt'));
+/**
+ * Local Whisper models, best first: large-v3 (most accurate, 99 languages) then large-v3-turbo
+ * (about 8x faster, a little less accurate outside English). WHISPER_DIR picks one explicitly.
+ */
+const WHISPER_DIRS = [
+  process.env.WHISPER_DIR,
+  path.join(MODELS, 'sherpa-onnx-whisper-large-v3'),
+  path.join(MODELS, 'sherpa-onnx-whisper-turbo'),
+].filter((d): d is string => !!d).map((d) => path.resolve(d));
+const hasTokens = (d: string) => { try { return readdirSync(d).some((f) => f.endsWith('tokens.txt')); } catch { return false; } };
+const localModel = () => WHISPER_DIRS.find(hasTokens) ?? null;
+const localReady = () => localModel() !== null;
+
+/** Which speech-to-text this server uses, for the health check and the editor's messages. */
+export function sttInfo(): { mode: 'api' | 'local' | 'none'; model?: string } {
+  if (process.env.STT_API_KEY) return { mode: 'api', model: process.env.STT_MODEL || 'whisper-1' };
+  const m = localModel();
+  return m ? { mode: 'local', model: path.basename(m).replace('sherpa-onnx-', '') } : { mode: 'none' };
+}
+
+/** Language: '' or 'auto' detects it; otherwise a Whisper code such as en, hi, gu, mr, ta, es. */
+const langOf = (language?: string) => {
+  const l = (language ?? process.env.STT_LANGUAGE ?? '').trim().toLowerCase();
+  return l === 'auto' ? '' : l;
+};
 
 export const sttConfigured = () => !!process.env.STT_API_KEY || localReady();
 
-/** Whisper turbo on this machine via sherpa-onnx: no key needed, slower than an API. */
-function transcribeLocal(audioFile: string): Promise<Word[]> {
+/** Whisper on this machine via sherpa-onnx: no key needed, slower than an API. */
+function transcribeLocal(audioFile: string, language?: string): Promise<Word[]> {
   return new Promise((resolve, reject) => {
     const py = PYTHON;
-    const p = spawn(py, [path.join(SCRIPTS, 'transcribe_local.py'), audioFile, WHISPER_DIR, '-', process.env.STT_LANGUAGE || 'en'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(py, [path.join(SCRIPTS, 'transcribe_local.py'), audioFile, localModel()!, '-', langOf(language) || 'auto'], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
     p.stdout.on('data', (d) => (out += d));
@@ -40,16 +62,16 @@ function transcribeLocal(audioFile: string): Promise<Word[]> {
   });
 }
 
-export async function transcribe(audioFile: string): Promise<Word[] | null> {
+export async function transcribe(audioFile: string, language?: string): Promise<Word[] | null> {
   const key = process.env.STT_API_KEY;
-  if (!key) return localReady() ? transcribeLocal(audioFile) : null;
+  if (!key) return localReady() ? transcribeLocal(audioFile, language) : null;
   const base = (process.env.STT_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
   const form = new FormData();
   form.append('file', new Blob([await readFile(audioFile)], { type: 'audio/mpeg' }), 'audio.mp3');
   form.append('model', process.env.STT_MODEL || 'whisper-1');
   form.append('response_format', 'verbose_json');
   form.append('timestamp_granularities[]', 'word');
-  if (process.env.STT_LANGUAGE) form.append('language', process.env.STT_LANGUAGE);
+  if (langOf(language)) form.append('language', langOf(language));
   // Whisper drops "um"/"uh" unless the prompt shows them; this keeps fillers so they can be cut.
   form.append('prompt', 'Umm, so, uh, like, you know, I mean, hmm.');
 

@@ -12,7 +12,7 @@ import { TopBar } from './TopBar';
 export function Editor() {
   const building = useStore((s) => s.building);
   const exportOpen = useStore((s) => s.exportOpen);
-  const [tlHeight, setTlHeight] = useState(272);
+  const [tlHeight, setTlHeight] = useState(324);
 
   // Generation jobs and playback both run on one clock.
   useEffect(() => {
@@ -48,11 +48,28 @@ export function Editor() {
       const s = useStore.getState();
       if (s.exportOpen || s.wizardOpen) return;
       const mod = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
       if (e.code === 'Space') { e.preventDefault(); s.togglePlay(); }
-      else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); }
-      else if (e.key === 's' && !mod) s.splitAtPlayhead();
+      else if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); }
+      // Premiere-style keys: Ctrl/⌘K cut, V select, C razor, S snapping, I/O mark, Alt+X clear.
+      else if (mod && k === 'k') { e.preventDefault(); s.splitAtPlayhead(); }
+      else if (mod) return;
+      else if (k === 'v') s.setTool('select');
+      else if (k === 'c') s.setTool('razor');
+      else if (k === 's') s.toggleSnapping();
+      else if (k === 'i') s.markIn();
+      else if (k === 'o') s.markOut();
+      else if (k === 'x' && e.altKey) s.clearInOut();
+      else if (k === 'k') s.setPlaying(false);
+      else if (k === 'l') s.setPlaying(true);
+      else if (e.key === 'ArrowUp') { e.preventDefault(); s.jumpEdit(-1); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); s.jumpEdit(1); }
+      else if (e.key === 'Home') s.setPlayhead(0);
+      else if (e.key === 'End') s.setPlayhead(duration(s));
+      else if (e.key === '=' || e.key === '+') s.setPxPerSec(s.pxPerSec * 1.4);
+      else if (e.key === '-') s.setPxPerSec(s.pxPerSec / 1.4);
       else if (e.key === 'Delete' || e.key === 'Backspace') s.deleteSelected();
-      else if (e.key === 'Escape') s.clearSelection();
+      else if (e.key === 'Escape') { s.clearSelection(); s.setTool('select'); }
       else if (e.key === 'ArrowLeft') s.setPlayhead(s.playhead - (e.shiftKey ? 1 : 1 / 30));
       else if (e.key === 'ArrowRight') s.setPlayhead(s.playhead + (e.shiftKey ? 1 : 1 / 30));
       else if (e.key === '/') { e.preventDefault(); document.getElementById('composer')?.focus(); }
