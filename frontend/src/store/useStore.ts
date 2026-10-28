@@ -1,6 +1,6 @@
 'use client';
 import { create } from 'zustand';
-import { online, startAnalysis, startBrollAnalysis, uploadFile, waitForJob, type Analysis, type BrollAnalysis } from '../lib/api';
+import { deleteMedia, online, startAnalysis, startBrollAnalysis, uploadFile, waitForJob, type Analysis, type BrollAnalysis } from '../lib/api';
 import { baseTimeline } from '@shared/autoEdit';
 import { askDirector } from '../lib/director-client';
 import { planEdit } from '@shared/director-mock';
@@ -178,6 +178,36 @@ export function summarize(clips: Clip[], words: Word[], lastChange?: string): Pr
 type Saved = Pick<State, 'assets' | 'clips' | 'words' | 'pauses' | 'captions' | 'look' | 'jobs' | 'changeSets' | 'messages' | 'sampleTranscript'>;
 const saved = new Map<string, Saved>();
 
+/**
+ * Projects and their edits are kept in this browser, so a reload keeps what you made and what
+ * you deleted. Local file previews (blob: URLs) don't survive a reload and are dropped.
+ */
+const STORE_KEY = 'cutroom-projects-v1';
+const live = (url?: string) => (url?.startsWith('blob:') ? undefined : url);
+function loadLocal(): { projects: Project[]; saved: [string, Saved][] } | null {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORE_KEY) : null;
+    if (!raw) return null;
+    const data = JSON.parse(raw) as { projects: Project[]; saved: [string, Saved][] };
+    return {
+      projects: data.projects.map((p) => ({ ...p, thumb: live(p.thumb), status: p.status === 'Rendering' ? 'Editing' : p.status })),
+      saved: data.saved.map(([id, v]) => [id, { ...v, assets: v.assets.map((a) => ({ ...a, url: live(a.url) })) }]),
+    };
+  } catch {
+    return null;
+  }
+}
+function saveLocal(projects: Project[]) {
+  try {
+    const ids = new Set(projects.map((p) => p.id));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ projects, saved: [...saved].filter(([id]) => ids.has(id)) }));
+  } catch {
+    // Storage full or blocked (private window): the session still works, it just won't be remembered.
+  }
+}
+const restored = loadLocal();
+restored?.saved.forEach(([id, v]) => saved.set(id, v));
+
 /** The sample projects open on the sample talk with the house first cut; their mini timeline shows that cut. */
 function sampleSummary(): ProjectSummary {
   const { words, pauses, duration: dur } = buildTranscript();
@@ -315,7 +345,7 @@ export const useStore = create<State>((set, get) => {
   return {
     view: 'dashboard', wizardOpen: false, query: '',
     setQuery: (query) => set({ query }),
-    projects: (() => { const sum = sampleSummary(); return SAMPLE_PROJECTS.map((p) => ({ ...p, summary: sum })); })(), project: null,
+    projects: restored?.projects ?? (() => { const sum = sampleSummary(); return SAMPLE_PROJECTS.map((p) => ({ ...p, summary: sum })); })(), project: null,
     assets: [], clips: [], words: [], pauses: [], captions: captionsFromPreset('bold-pop'), look: DEFAULT_LOOK,
     jobs: [], changeSets: [], messages: [], thinking: false,
     playhead: 0, playing: false, selection: null, selectedClipIds: [], pxPerSec: 34,
@@ -338,6 +368,10 @@ export const useStore = create<State>((set, get) => {
     closeWizard: () => set({ wizardOpen: false }),
 
     deleteProject: (id) => {
+      // Uploaded footage for this project is removed from the server too, so it doesn't pile up.
+      const st = get();
+      const assets = st.project?.id === id ? st.assets : saved.get(id)?.assets ?? [];
+      if (online()) for (const a of assets) if (a.serverId) void deleteMedia(a.serverId);
       saved.delete(id);
       set((s) => ({
         projects: s.projects.filter((p) => p.id !== id),
@@ -579,3 +613,13 @@ export const useStore = create<State>((set, get) => {
     },
   };
 });
+
+// Remember projects whenever the list changes (create, rename, status, delete, leaving the editor).
+if (typeof window !== 'undefined') {
+  let last = useStore.getState().projects;
+  useStore.subscribe((st) => {
+    if (st.projects === last) return;
+    last = st.projects;
+    saveLocal(st.projects);
+  });
+}

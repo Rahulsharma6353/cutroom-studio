@@ -89,6 +89,9 @@ export interface Analysis {
 
 export interface BrollAnalysis { duration: number; width?: number; height?: number; hasVideo: boolean; calm: CalmSample[]; faces?: FaceSample[] }
 
+/** Deletes an upload on the server (best effort: a missing file is fine). */
+export const deleteMedia = (id: string) => fetch(`/api/media/${id}`, { method: 'DELETE', headers: keyHeaders() }).then(() => undefined, () => undefined);
+
 export const startAnalysis = (id: string) => post<{ jobId: string; steps: string[] }>('/api/analyze', { id });
 export const startBrollAnalysis = (id: string) => post<{ jobId: string; steps: string[] }>('/api/analyze', { id, light: true });
 export const startExport = (body: unknown) => post<{ jobId: string; steps: string[] }>('/api/export', body);

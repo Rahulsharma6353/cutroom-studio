@@ -38,6 +38,7 @@ app.post('/api/director', (c) => director.POST(c.req.raw));
 app.post('/api/export', (c) => exportRoute.POST(c.req.raw));
 app.get('/api/jobs/:id', (c) => jobsId.GET(c.req.raw, params(c.req.param('id'))));
 app.get('/api/media/:id', (c) => mediaId.GET(c.req.raw, params(c.req.param('id'))));
+app.delete('/api/media/:id', (c) => mediaId.DELETE(c.req.raw, params(c.req.param('id'))));
 app.get('/api/exports/:id', (c) => exportsId.GET(c.req.raw, params(c.req.param('id'))));
 app.get('/api/health', (c) => c.json({ ok: true, locked: !keyOk(c) }));
 
