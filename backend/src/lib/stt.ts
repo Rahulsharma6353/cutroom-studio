@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Word } from '@shared/types';
-import { MODELS, SCRIPTS } from './paths';
+import { MODELS, SCRIPTS, PYTHON } from './paths';
 
 /**
  * Speech-to-text with word timestamps through any OpenAI-compatible
@@ -21,7 +21,7 @@ export const sttConfigured = () => !!process.env.STT_API_KEY || localReady();
 /** Whisper turbo on this machine via sherpa-onnx: no key needed, slower than an API. */
 function transcribeLocal(audioFile: string): Promise<Word[]> {
   return new Promise((resolve, reject) => {
-    const py = process.env.PYTHON_PATH || 'python3';
+    const py = PYTHON;
     const p = spawn(py, [path.join(SCRIPTS, 'transcribe_local.py'), audioFile, WHISPER_DIR, '-', process.env.STT_LANGUAGE || 'en'], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';

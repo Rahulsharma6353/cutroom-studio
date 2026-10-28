@@ -3,7 +3,7 @@ import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pixelPhrases } from '@shared/frame/Frame';
 import { enqueue } from './jobs';
-import { ASSETS, SCRIPTS } from './paths';
+import { ASSETS, SCRIPTS, PYTHON } from './paths';
 import { browser, getBundle, type RenderRequest } from './render';
 import { frameSize } from './render-size';
 import { ensureExports, mediaPath, readMeta } from './storage';
@@ -140,7 +140,7 @@ export function startPremiereExport(req: RenderRequest, origin: string, folder: 
         ? pixelPhrases(req.words).map((p) => ({ t0: p.words[0].t, t1: p.end, text: p.words.map((w) => w.w).join(' ') }))
         : [];
       await writeFile(path.join(work, 'phrases.json'), JSON.stringify(phrases));
-      const out = await run(process.env.PYTHON_PATH || 'python3', [
+      const out = await run(PYTHON, [
         path.join(SCRIPTS, 'premiere_package.py'), path.join(work, 'body.json'), layersDir, pkg, path.join(ASSETS, 'sfx'),
         (folder ? joinFolder(folder, pkgName) : `C:/${pkgName}`).replace(/\\/g, '/'), path.join(work, 'phrases.json'),
       ]);
@@ -150,7 +150,9 @@ export function startPremiereExport(req: RenderRequest, origin: string, folder: 
 
       ctx.step(4);
       const zip = path.join(exportsDir, `${id}.zip`);
-      await run('zip', ['-qr', zip, pkgName], work);
+      // zip on Linux/macOS; Windows has no zip command, but its built-in tar writes .zip files.
+      if (process.platform === 'win32') await run('tar', ['-a', '-c', '-f', zip, pkgName], work);
+      else await run('zip', ['-qr', zip, pkgName], work);
       return { file: path.basename(zip), name: `${pkgName}.zip`, mime: 'application/zip' };
     } finally {
       await rm(work, { recursive: true, force: true });

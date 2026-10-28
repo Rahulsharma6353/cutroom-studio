@@ -67,7 +67,14 @@ def encode(pngs, out, opaque=False):
     tmp = out + '.seq'
     os.makedirs(tmp, exist_ok=True)
     for k, p in enumerate(pngs):
-        os.symlink(os.path.abspath(p), f'{tmp}/{k:06d}.png')
+        dst = f'{tmp}/{k:06d}.png'
+        try:
+            os.symlink(os.path.abspath(p), dst)
+        except OSError:  # Windows without symlink rights: hard link, else copy
+            try:
+                os.link(os.path.abspath(p), dst)
+            except OSError:
+                shutil.copy(p, dst)
     codec = ['-c:v', 'libx264', '-crf', '14', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'] if opaque else ['-c:v', 'qtrle', '-pix_fmt', 'argb']
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', str(FPS), '-i', f'{tmp}/%06d.png'] + codec + [out], check=True)
     shutil.rmtree(tmp)
