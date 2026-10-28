@@ -9,6 +9,7 @@ import * as analyze from './routes/analyze';
 import * as director from './routes/director';
 import * as exportRoute from './routes/export';
 import * as stock from './routes/stock';
+import * as genImage from './routes/generate-image';
 import * as exportsId from './routes/exports-id';
 import * as jobsId from './routes/jobs-id';
 import * as mediaId from './routes/media-id';
@@ -39,11 +40,12 @@ app.post('/api/analyze', (c) => analyze.POST(c.req.raw));
 app.post('/api/director', (c) => director.POST(c.req.raw));
 app.post('/api/export', (c) => exportRoute.POST(c.req.raw));
 app.post('/api/stock', (c) => stock.POST(c.req.raw));
+app.post('/api/generate-image', (c) => genImage.POST(c.req.raw));
 app.get('/api/jobs/:id', (c) => jobsId.GET(c.req.raw, params(c.req.param('id'))));
 app.get('/api/media/:id', (c) => mediaId.GET(c.req.raw, params(c.req.param('id'))));
 app.delete('/api/media/:id', (c) => mediaId.DELETE(c.req.raw, params(c.req.param('id'))));
 app.get('/api/exports/:id', (c) => exportsId.GET(c.req.raw, params(c.req.param('id'))));
-app.get('/api/health', (c) => c.json({ ok: true, locked: !keyOk(c), stt: sttInfo(), stock: stock.stockReady() }));
+app.get('/api/health', (c) => c.json({ ok: true, locked: !keyOk(c), stt: sttInfo(), stock: stock.stockReady(), images: genImage.imagesReady() }));
 
 // Brand marks and sound effects: the renderer loads them from here, the editor through its proxy.
 const MIME: Record<string, string> = { '.png': 'image/png', '.svg': 'image/svg+xml', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.jpg': 'image/jpeg' };

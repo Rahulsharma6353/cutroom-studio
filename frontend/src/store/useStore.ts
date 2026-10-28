@@ -1,12 +1,13 @@
 'use client';
 import { create } from 'zustand';
-import { deleteMedia, fetchStock, online, startAnalysis, startBrollAnalysis, uploadFile, waitForJob, type Analysis, type BrollAnalysis } from '../lib/api';
+import { deleteMedia, fetchStock, generateImage, online, serverCaps, startAnalysis, startBrollAnalysis, uploadFile, waitForJob, type Analysis, type BrollAnalysis } from '../lib/api';
 import { baseTimeline } from '@shared/autoEdit';
 import { askDirector } from '../lib/director-client';
 import { planEdit } from '@shared/director-mock';
 import { applyOps, TRACK_IDS, timelineDuration, validateOps } from '@shared/ops';
 import { buildTranscript, captionsFromPreset, DEFAULT_LOOK, SAMPLE_PROJECTS, TEMPLATES } from '@shared/sample';
 import { explainerBroll, explainerLayers } from '@shared/explainer';
+import { imagePromptFor, motionFor } from '@shared/motion';
 import { ratioOf } from '@shared/frame/Thumb';
 
 /** The house style every first cut uses: pixel captions, punch-ins, sound design. Not shown as a choice. */
@@ -256,6 +257,18 @@ export function scopeLabel(s: Pick<State, 'selection' | 'selectedClipIds' | 'cli
   return `${timecode(sc.start)}–${timecode(sc.end)}${n ? `, ${n} clip${n > 1 ? 's' : ''}` : ''}`;
 }
 
+/** What the server can make when there is no B-roll: refreshed before each first cut. */
+let caps = { stock: false, images: false };
+
+/** The picture mood for AI cutaways, from the style's look. */
+const moodOf = (look: Look) =>
+  look.grade === 'cinematic' ? 'Cinematic film still, moody low-key light, shallow depth of field, photorealistic'
+    : look.slideBg === 'paper' ? 'Clean editorial photograph, soft natural light, muted paper-like tones, minimal composition'
+      : look.grade === 'punchy' ? 'Bold, vivid, high-contrast commercial photo, clean background'
+        : 'Photorealistic, vivid, crisp editorial photo, natural light, shallow depth of field';
+
+const shapeOf = (asp: AspectRatio | undefined): 'portrait' | 'landscape' | 'square' => (asp === '16:9' || asp === '4:3' ? 'landscape' : asp === '1:1' ? 'square' : 'portrait');
+
 export const useStore = create<State>((set, get) => {
   // Navigation or a newer prompt makes every earlier director response obsolete.
   let directorGeneration = 0;
@@ -287,10 +300,31 @@ export const useStore = create<State>((set, get) => {
         const res = planEdit(plan);
         // Own footage wins over stock: drop the stock placeholders and cut the uploads in instead.
         if (ownBroll) res.ops = res.ops.filter((o) => !(o.op === 'insert_clip' && o.trackKind === 'broll' && o.origin === 'stock'));
+        // No B-roll uploaded: each beat becomes a motion graphic in the style's colours, an AI image,
+        // or a stock shot, rotating through what this server can make.
+        const made = { motion: 0, image: 0, stock: 0 };
+        if (!ownBroll) {
+          const kinds: ('motion' | 'image' | 'stock')[] = ['motion', ...(online() && caps.images ? ['image' as const] : []), ...(online() && caps.stock ? ['stock' as const] : [])];
+          let i = 0;
+          res.ops = res.ops.map((o) => {
+            if (!(o.op === 'insert_clip' && o.trackKind === 'broll' && o.origin === 'stock')) return o;
+            const kind = kinds[i % kinds.length];
+            const g = motionFor(words, o.start, o.start + o.duration, project.title, i);
+            i++;
+            made[kind]++;
+            if (kind === 'stock') return o;
+            if (kind === 'image') return { ...o, assetKind: 'image' as const, origin: 'generated' as const, label: g.text, credit: 'AI image', job: { type: 'image' as const, eta: 14 } };
+            return { ...o, assetKind: 'graphic' as const, origin: 'library' as const, label: g.text, credit: undefined, job: undefined, graphic: g };
+          });
+        }
         const csId = uid('cs');
         const before = snap(get());
         const out = applyOps(before, validateOps(res.ops, null, plan.duration), csId);
         let summary = res.summary;
+        if (!ownBroll && made.motion + made.image > 0) {
+          const parts = [made.motion && `${made.motion} motion-graphic cutaway${made.motion > 1 ? 's' : ''} in the style’s colours`, made.image && `${made.image} AI image${made.image > 1 ? 's' : ''}`, made.stock && `${made.stock} stock shot${made.stock > 1 ? 's' : ''}`].filter(Boolean);
+          summary = summary.replace(/matched \d+ B-roll shots? to your script/i, (m) => `${m[0] === 'M' ? 'Made' : 'made'} ${parts.join(', ')} for B-roll`);
+        }
         let captionsOn = true;
         if (template.layout !== 'explainer' && ownBroll) {
           const broll = explainerBroll({ clips: out.clips, words: out.words, assets: [...get().assets, ...out.assets] }).map((c) => ({ ...c, changeSetId: csId }));
@@ -346,18 +380,57 @@ export const useStore = create<State>((set, get) => {
         })
         .catch((err: Error & { code?: string }) => {
           const st = get();
-          // A cutaway with no footage would export as a blank card: take it off the timeline.
+          // A cutaway with no footage would export as a blank card: make it a motion graphic instead.
           set({
-            clips: st.clips.filter((c) => c.id !== clip.id),
+            clips: st.clips.map((c) => (c.id === clip.id ? { ...c, status: 'ready', jobId: undefined, graphic: motionFor(st.words, c.start, c.start + c.duration, s.project?.title ?? c.label, 1) } : c)),
             jobs: st.jobs.map((j) => (j.id === job.id ? { ...j, status: 'failed' } : j)),
             ...(err.code === 'no-key' && !toldNoKey
-              ? { messages: [...st.messages, { id: uid('m'), role: 'editor' as const, text: `I couldn’t add stock B-roll: ${err.message} Until then, upload your own B-roll in Media and I’ll cut it in.` }] }
+              ? { messages: [...st.messages, { id: uid('m'), role: 'editor' as const, text: `I couldn’t add stock B-roll (${err.message}), so those cutaways are motion graphics for now. Upload your own B-roll in Media and I’ll cut it in.` }] }
               : {}),
           });
           if (err.code === 'no-key') toldNoKey = true;
         });
     });
   };
+
+  /** AI image cutaways: two at a time; a failed one leaves the timeline (no blank cards in the export). */
+  const imageSlots: Promise<unknown>[] = [Promise.resolve(), Promise.resolve()];
+  let imageTurn = 0;
+  const runImage = (job: Job) => {
+    if (stockStarted.has(job.id)) return;
+    stockStarted.add(job.id);
+    const slot = imageTurn++ % imageSlots.length;
+    imageSlots[slot] = imageSlots[slot].then(() => {
+      const s = get();
+      const clip = s.clips.find((c) => c.id === job.clipId);
+      if (!clip) return;
+      const prompt = imagePromptFor(s.words, clip.start, clip.start + clip.duration, clip.label || s.project?.title || 'creator', moodOf(s.look));
+      return generateImage({ prompt, shape: shapeOf(s.project?.aspect), label: clip.label })
+        .then((r) => {
+          const st = get();
+          if (!st.clips.some((c) => c.id === clip.id)) return;
+          set({
+            assets: st.assets.map((a) => (a.id === clip.assetId ? { ...a, name: r.name, url: r.url, serverId: r.id, kind: 'image', duration: 0, width: r.width, height: r.height, credit: 'AI image' } : a)),
+            clips: st.clips.map((c) => (c.id === clip.id ? { ...c, status: 'ready', in: 0 } : c)),
+            jobs: st.jobs.map((j) => (j.id === job.id ? { ...j, progress: 1, status: 'done' } : j)),
+          });
+        })
+        .catch((err: Error & { code?: string }) => {
+          const st = get();
+          // Fall back to a motion graphic for B-roll beats; drop failed overlay images.
+          const onBroll = clip.trackId === TRACK_IDS.broll;
+          set({
+            clips: onBroll
+              ? st.clips.map((c) => (c.id === clip.id ? { ...c, status: 'ready', jobId: undefined, graphic: motionFor(st.words, c.start, c.start + c.duration, c.label, 0) } : c))
+              : st.clips.filter((c) => c.id !== clip.id),
+            jobs: st.jobs.map((j) => (j.id === job.id ? { ...j, status: 'failed' } : j)),
+            ...(!toldImageErr ? { messages: [...st.messages, { id: uid('m'), role: 'editor' as const, text: `I couldn’t generate an AI image (${err.message}), so I used a motion graphic there instead.` }] } : {}),
+          });
+          toldImageErr = true;
+        });
+    });
+  };
+  let toldImageErr = false;
 
   /** Real pipeline: upload every file, analyse the A-roll, then make the first cut. */
   const buildFromServer = async (projectIn: Project, brief: string, files: UploadedFile[], arollFile: UploadedFile, language = 'auto') => {
@@ -380,6 +453,7 @@ export const useStore = create<State>((set, get) => {
         ),
       );
       const arollUp = uploaded[files.indexOf(arollFile)]!;
+      caps = await serverCaps();
       const { jobId } = await startAnalysis(arollUp.id, language);
       // B-roll: shape and calm areas, so text over a cutaway lands in its quiet space too.
       const brollP = Promise.all(files.map(async (f, i) => {
@@ -699,6 +773,10 @@ export const useStore = create<State>((set, get) => {
       const finished: string[] = [];
       const jobs = s.jobs.map((j) => {
         if (j.status === 'done' || j.status === 'failed') return j;
+        if (j.type === 'image' && online() && caps.images) {
+          runImage(j);
+          return { ...j, progress: Math.min(0.9, j.progress + dt / Math.max(8, j.eta)), status: 'running' as const };
+        }
         if (j.type === 'stock' && online()) {
           // Real stock search: the server finishes it; the bar creeps toward 90 % meanwhile.
           runStock(j);

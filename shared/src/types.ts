@@ -106,7 +106,9 @@ export interface FilmLookSpec { grain: number; vignette: number }
 export interface CalmSample { t: number; cols: number; rows: number; edge: number[]; luma: number[] }
 
 export interface GraphicSpec {
-  component: 'LowerThird' | 'Headline' | 'Counter' | 'Callout' | 'BigWord' | 'List' | 'UI' | 'Labels';
+  component: 'LowerThird' | 'Headline' | 'Counter' | 'Callout' | 'BigWord' | 'List' | 'UI' | 'Labels' | 'Motion';
+  /** Motion-graphic B-roll scene (full frame, in the style's colours). */
+  scene?: 'kinetic' | 'stat' | 'versus' | 'steps';
   text: string;
   sub?: string; // small kicker above a BigWord, second line of a LowerThird
   items?: string[]; // List rows

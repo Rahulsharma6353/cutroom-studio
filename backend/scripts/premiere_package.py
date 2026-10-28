@@ -232,8 +232,8 @@ print('caption clips', len(cap_items))
 
 # Graphics: one clip each, grouped by layer kind so each kind gets its own track(s).
 # Stills (plate, film look) are PNGs held for the clip's length.
-ORDER = ['t-plate', 't-look', 't-overlay', 't-labels', 't-setup', 't-key']
-KIND_NAME = {'t-plate': 'Background', 't-look': 'Look', 't-overlay': 'Graphic', 't-labels': 'Labels', 't-setup': 'Setup', 't-key': 'Key'}
+ORDER = ['t-plate', 't-broll', 't-look', 't-overlay', 't-labels', 't-setup', 't-key']
+KIND_NAME = {'t-plate': 'Background', 't-broll': 'Motion', 't-look': 'Look', 't-overlay': 'Graphic', 't-labels': 'Labels', 't-setup': 'Setup', 't-key': 'Key'}
 by_track = {k: [] for k in ORDER}
 for m in manifest:
     if m['name'] == 'captions':
@@ -252,7 +252,7 @@ for m in manifest:
         files[cid]['still'] = True
         item = dict(name=f"{KIND_NAME.get(track, 'Layer')}: {c['label']}"[:60], file=cid, start=m['from'], end=end, inp=0, out=end - m['from'], scale=100, kf=None)
     else:
-        opaque = ((c.get('graphic') or {}).get('ui')) == 'pages'  # full-frame scene: no alpha needed
+        opaque = ((c.get('graphic') or {}).get('ui')) == 'pages' or track == 't-broll'  # full-frame scene: no alpha needed
         fname = f"{len(files):02d}_{prefix}_{safe}.{'mp4' if opaque else 'mov'}"
         print('layer', fname, len(pngs), flush=True)
         encode(pngs, f'{out_dir}/graphics/{fname}', opaque)

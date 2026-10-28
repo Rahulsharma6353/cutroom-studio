@@ -84,7 +84,8 @@ export function startPremiereExport(req: RenderRequest, origin: string, folder: 
       // Every graphic, label stack, setup line and key line is its own clip; the plate and the film
       // look don't move, so they are one still each.
       const LAYER_TRACKS = ['t-plate', 't-look', 't-overlay', 't-labels', 't-setup', 't-key'];
-      for (const c of req.clips.filter((c) => LAYER_TRACKS.includes(c.trackId))) {
+      // Motion-graphic B-roll is drawn, not filmed: it becomes a rendered full-frame layer too.
+      for (const c of req.clips.filter((c) => LAYER_TRACKS.includes(c.trackId) || (c.trackId === 't-broll' && c.graphic?.component === 'Motion'))) {
         const from = Math.max(0, Math.round(c.start * fps));
         const to = Math.min(durationInFrames - 1, Math.round((c.start + c.duration) * fps) - 1);
         const still = c.trackId === 't-plate' || c.trackId === 't-look';

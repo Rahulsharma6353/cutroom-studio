@@ -104,3 +104,20 @@ export async function fetchStock(body: { query: string; orientation: 'portrait' 
   if (!res.ok) throw Object.assign(new Error(json.error ?? 'Stock search failed.'), { code: json.code ?? 'failed' });
   return json as StockClip;
 }
+
+/** AI image cutaway, stored on the server. Errors carry 'no-key', 'refused' or 'failed'. */
+export async function generateImage(body: { prompt: string; shape: 'portrait' | 'landscape' | 'square'; label: string }): Promise<{ id: string; url: string; name: string; width: number; height: number }> {
+  const res = await fetch('/api/generate-image', { method: 'POST', headers: { 'content-type': 'application/json', ...keyHeaders() }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(json.error ?? 'Image generation failed.'), { code: json.code ?? 'failed' });
+  return json;
+}
+
+/** What this server can make on its own: stock footage (Pexels key) and AI images (image API key). */
+export async function serverCaps(): Promise<{ stock: boolean; images: boolean }> {
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store', headers: keyHeaders() });
+    const j = await r.json();
+    return { stock: !!j.stock, images: !!j.images };
+  } catch { return { stock: false, images: false }; }
+}
