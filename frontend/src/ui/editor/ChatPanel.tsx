@@ -38,7 +38,7 @@ export function ChatPanel() {
   return (
     <aside className="side right" aria-label="Editor chat">
       <div className="chat-head">
-        <strong><I.Spark /> Editor</strong>
+        <strong><I.Spark /> <span className="serif">Your <em>editor</em></span></strong>
         <small>Edits only what you select</small>
       </div>
       <div className="chat-log" ref={log} aria-live="polite">
@@ -106,7 +106,7 @@ function ChangeCard({ cs, jobs }: { cs: ChangeSet; jobs: Job[] }) {
       {cs.status === 'preview' && (
         <div className="change-actions">
           <button className="btn btn-primary" onClick={() => accept(cs.id)}><I.Check size={14} /> Keep</button>
-          <button className="btn" onClick={() => revert(cs.id)}><I.Undo size={14} /> Undo</button>
+          <button className="btn" onClick={() => revert(cs.id)}><I.Undo size={14} /> Undo this change</button>
         </div>
       )}
       {cs.status === 'accepted' && (

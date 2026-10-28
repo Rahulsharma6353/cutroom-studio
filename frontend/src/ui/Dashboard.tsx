@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Project, ProjectSummary, TrackKind } from '@shared/types';
 import { SceneThumb, ratioOf } from '@shared/frame/Thumb';
 import { toUploaded } from '../lib/files';
@@ -12,6 +12,39 @@ export type ServerState = 'checking' | 'up' | 'down' | 'preview' | 'locked';
 const SERVER_TEXT: Record<ServerState, string> = { checking: 'Checking the render server', up: 'Render server connected', down: 'Render server offline', preview: 'Preview: nothing renders here', locked: 'Locked: enter the passcode' };
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+/** Headline voice: the title in roman, its last words in italic. */
+function Headline({ text }: { text: string }) {
+  const words = text.trim().split(/\s+/);
+  if (words.length < 3) return <em>{text}</em>;
+  const tail = words.length > 4 ? 2 : 1;
+  return <>{words.slice(0, -tail).join(' ')} <em>{words.slice(-tail).join(' ')}</em></>;
+}
+
+/** The ⋯ menu on a project card: open or delete. */
+function ProjectMenu({ p, onClose }: { p: Project; onClose: () => void }) {
+  const openProject = useStore((s) => s.openProject);
+  const deleteProject = useStore((s) => s.deleteProject);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const away = (e: MouseEvent) => { if (!ref.current?.parentElement?.contains(e.target as Node)) onClose(); };
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    ref.current?.querySelector('button')?.focus();
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [onClose]);
+  return (
+    <div className="proj-menu" role="menu" ref={ref} aria-label={`Actions for ${p.title}`}>
+      <button role="menuitem" onClick={() => { onClose(); openProject(p.id); }}>Open</button>
+      <hr />
+      <button role="menuitem" className="danger" onClick={() => {
+        onClose();
+        if (window.confirm(`Delete “${p.title}”? This can’t be undone.`)) deleteProject(p.id);
+      }}><I.Trash size={15} /> Delete project</button>
+    </div>
+  );
+}
 
 /** A project's frame at its true shape: real footage when we have it, a stand-in otherwise. */
 function Frame({ p, size }: { p: Project; size: 'lg' | 'sm' }) {
@@ -68,6 +101,7 @@ export function Dashboard({ server }: { server: ServerState }) {
   const setQuery = useStore((s) => s.setQuery);
   const [over, setOver] = useState(false);
   const [filter, setFilter] = useState<Filter>('All');
+  const [menu, setMenu] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const take = async (files: FileList | null) => {
@@ -84,6 +118,9 @@ export function Dashboard({ server }: { server: ServerState }) {
 
   return (
     <div className="page-inner">
+      <div className="studio-head">
+        <h1 className="serif">Your studio, <em>ready to cut.</em></h1>
+      </div>
       <div className="desk">
         {last ? (
           <section className="resume" aria-labelledby="resume-title">
@@ -93,7 +130,7 @@ export function Dashboard({ server }: { server: ServerState }) {
             </button>
             <div className="resume-info">
               <p className="resume-kicker">Continue editing</p>
-              <h2 id="resume-title">{last.title}</h2>
+              <h2 id="resume-title"><Headline text={last.title} /></h2>
               <div className="meta">
                 <span className="state" data-s={last.status}>{last.status}</span>
                 <span>{last.aspect}</span>
@@ -101,16 +138,17 @@ export function Dashboard({ server }: { server: ServerState }) {
               </div>
               {last.summary && <MiniTimeline s={last.summary} />}
               {last.summary?.lastChange && (
-                <p className="last-change"><I.Spark size={14} /> <span>{last.summary.lastChange}</span></p>
+                <p className="last-change"><I.Spark size={16} /> <span><b>Last AI change:</b> {last.summary.lastChange}</span></p>
               )}
               <div className="resume-actions">
                 <button className="btn btn-primary btn-lg" onClick={() => openProject(last.id)}>Resume editing</button>
+                <button className="btn btn-lg" onClick={() => { openProject(last.id); useStore.getState().setExportOpen(true); }}><I.Export size={16} /> Export</button>
               </div>
             </div>
           </section>
         ) : (
           <section className="resume resume-empty">
-            <h2>Your first video starts here</h2>
+            <h2>Your first video <em>starts here.</em></h2>
             <p>Add a talking-head take and you get a first cut with pauses out, captions on, graphics and sound placed.</p>
           </section>
         )}
@@ -124,7 +162,7 @@ export function Dashboard({ server }: { server: ServerState }) {
             onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files); }}
           >
             <span className="dropcard-icon" aria-hidden><I.Upload size={18} /></span>
-            <strong>{over ? 'Let go to start a video' : 'Drop footage to start a video'}</strong>
+            <strong>{over ? <>Let go to <em>start a video.</em></> : <>Drop footage, <em>get a first cut.</em></>}</strong>
             <span>A-roll, B-roll, script or music, up to 10 GB a file</span>
             <div className="dropcard-actions">
               <button className="btn" onClick={() => input.current?.click()}>Choose files</button>
@@ -154,7 +192,7 @@ export function Dashboard({ server }: { server: ServerState }) {
       </div>
 
       <div className="lib-bar">
-        <h2>All projects</h2>
+        <h2>All <em>projects</em></h2>
         <div className="seg" role="group" aria-label="Show">
           {FILTERS.map((f) => (
             <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>
@@ -168,18 +206,30 @@ export function Dashboard({ server }: { server: ServerState }) {
       {shown.length ? (
         <section className="projects">
           {shown.map((p) => (
-            <button key={p.id} className="proj" onClick={() => openProject(p.id)}>
-              <div className="plate">
-                <Frame p={p} size="sm" />
-                <span className="tc tnum">{clock(p.duration)}</span>
-              </div>
-              <strong>{p.title}</strong>
-              <div className="meta">
-                <span className="state" data-s={p.status}>{p.status}</span>
-                <span>{p.aspect}</span>
-                <span>{p.updated}</span>
-              </div>
-            </button>
+            <article key={p.id} className="proj-card">
+              <button className="proj" onClick={() => openProject(p.id)}>
+                <div className="plate">
+                  <Frame p={p} size="sm" />
+                  <span className="tc tnum">{clock(p.duration)}</span>
+                </div>
+                <strong>{p.title}</strong>
+                <div className="meta">
+                  <span className="state" data-s={p.status}>{p.status}</span>
+                  <span>{p.aspect}</span>
+                  <span>{p.updated}</span>
+                </div>
+              </button>
+              <button
+                className="proj-more"
+                aria-label={`More actions for ${p.title}`}
+                aria-haspopup="menu"
+                aria-expanded={menu === p.id}
+                onClick={() => setMenu(menu === p.id ? null : p.id)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+              </button>
+              {menu === p.id && <ProjectMenu p={p} onClose={() => setMenu(null)} />}
+            </article>
           ))}
         </section>
       ) : (

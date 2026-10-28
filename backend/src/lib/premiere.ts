@@ -3,7 +3,7 @@ import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pixelPhrases } from '@shared/frame/Frame';
 import { enqueue } from './jobs';
-import { ASSETS, SCRIPTS } from './paths';
+import { ASSETS, SCRIPTS, PYTHON } from './paths';
 import { browser, getBundle, type RenderRequest } from './render';
 import { frameSize } from './render-size';
 import { ensureExports, mediaPath, readMeta } from './storage';
@@ -84,7 +84,8 @@ export function startPremiereExport(req: RenderRequest, origin: string, folder: 
       // Every graphic, label stack, setup line and key line is its own clip; the plate and the film
       // look don't move, so they are one still each.
       const LAYER_TRACKS = ['t-plate', 't-look', 't-overlay', 't-labels', 't-setup', 't-key'];
-      for (const c of req.clips.filter((c) => LAYER_TRACKS.includes(c.trackId))) {
+      // Motion-graphic B-roll is drawn, not filmed: it becomes a rendered full-frame layer too.
+      for (const c of req.clips.filter((c) => LAYER_TRACKS.includes(c.trackId) || (c.trackId === 't-broll' && c.graphic?.component === 'Motion'))) {
         const from = Math.max(0, Math.round(c.start * fps));
         const to = Math.min(durationInFrames - 1, Math.round((c.start + c.duration) * fps) - 1);
         const still = c.trackId === 't-plate' || c.trackId === 't-look';
@@ -140,7 +141,7 @@ export function startPremiereExport(req: RenderRequest, origin: string, folder: 
         ? pixelPhrases(req.words).map((p) => ({ t0: p.words[0].t, t1: p.end, text: p.words.map((w) => w.w).join(' ') }))
         : [];
       await writeFile(path.join(work, 'phrases.json'), JSON.stringify(phrases));
-      const out = await run(process.env.PYTHON_PATH || 'python3', [
+      const out = await run(PYTHON, [
         path.join(SCRIPTS, 'premiere_package.py'), path.join(work, 'body.json'), layersDir, pkg, path.join(ASSETS, 'sfx'),
         (folder ? joinFolder(folder, pkgName) : `C:/${pkgName}`).replace(/\\/g, '/'), path.join(work, 'phrases.json'),
       ]);
@@ -150,7 +151,9 @@ export function startPremiereExport(req: RenderRequest, origin: string, folder: 
 
       ctx.step(4);
       const zip = path.join(exportsDir, `${id}.zip`);
-      await run('zip', ['-qr', zip, pkgName], work);
+      // zip on Linux/macOS; Windows has no zip command, but its built-in tar writes .zip files.
+      if (process.platform === 'win32') await run('tar', ['-a', '-c', '-f', zip, pkgName], work);
+      else await run('zip', ['-qr', zip, pkgName], work);
       return { file: path.basename(zip), name: `${pkgName}.zip`, mime: 'application/zip' };
     } finally {
       await rm(work, { recursive: true, force: true });

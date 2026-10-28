@@ -4,6 +4,7 @@ import type { Asset, CaptionSettings, Clip, Look, Word } from '@shared/types';
 import { Frame, type RenderMedia } from '@shared/frame/Frame';
 import { ASSET_BASE } from '@shared/frame/UICard';
 import { sfxFile, SFX_VOLUME } from '@shared/sfx';
+import { dbToGain } from '@shared/util';
 import '@shared/styles/fonts';
 import '@shared/styles/frame.css';
 
@@ -53,7 +54,7 @@ export function TimelineVideo({ clips, assets, words, captions, look, fps, origi
       // A voiceover: sound only.
       return (
         <Sequence from={from} durationInFrames={Math.max(1, Math.round(clip.duration * fps))} layout="none">
-          <Audio src={src(asset)} trimBefore={Math.max(0, Math.round(clip.in * fps))} />
+          <Audio src={src(asset)} trimBefore={Math.max(0, Math.round(clip.in * fps))} volume={dbToGain(clip.gainDb)} />
         </Sequence>
       );
     }
@@ -62,7 +63,8 @@ export function TimelineVideo({ clips, assets, words, captions, look, fps, origi
         <OffthreadVideo
           src={src(asset)}
           trimBefore={Math.max(0, Math.round(clip.in * fps))}
-          muted={slot !== 'aroll'}
+          muted={slot !== 'aroll' || dbToGain(clip.gainDb) === 0}
+          volume={dbToGain(clip.gainDb)}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       </Sequence>
@@ -76,10 +78,20 @@ export function TimelineVideo({ clips, assets, words, captions, look, fps, origi
       <Frame t={t} clips={clips} assets={assets} words={words} captions={captions} look={look} ratio={width / height} renderMedia={renderMedia} still layer={layer} onlyClip={onlyClip} />
       {layer === 'all' && clips.filter((c) => c.trackId === 't-sfx').map((c) => {
         const file = sfxFile(c.label);
-        if (!file) return null;
+        if (!file || dbToGain(c.gainDb) === 0) return null;
         return (
           <Sequence key={c.id} from={Math.max(0, Math.round(c.start * fps))} durationInFrames={Math.max(1, Math.round(Math.max(c.duration, 0.1) * fps) + 2)} layout="none">
-            <Audio src={`${origin}/sfx/${file}`} volume={SFX_VOLUME[file] ?? 0.6} />
+            <Audio src={`${origin}/sfx/${file}`} volume={(SFX_VOLUME[file] ?? 0.6) * dbToGain(c.gainDb)} />
+          </Sequence>
+        );
+      })}
+      {/* Music beds: 0 dB clip volume is the bed level (0.35), like the Premiere export. */}
+      {layer === 'all' && clips.filter((c) => c.trackId === 't-music' && dbToGain(c.gainDb) > 0).map((c) => {
+        const a = assets.find((x) => x.id === c.assetId);
+        if (!a?.url) return null;
+        return (
+          <Sequence key={c.id} from={Math.max(0, Math.round(c.start * fps))} durationInFrames={Math.max(1, Math.round(c.duration * fps))} layout="none">
+            <Audio src={src(a)} trimBefore={Math.max(0, Math.round(c.in * fps))} volume={0.35 * dbToGain(c.gainDb)} />
           </Sequence>
         );
       })}

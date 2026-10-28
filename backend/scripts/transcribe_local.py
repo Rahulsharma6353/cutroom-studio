@@ -1,12 +1,14 @@
 """Local speech-to-text (no API key): sherpa-onnx Whisper, run per chunk of <= 7 s split at pauses
 and energy dips; word times spread across each chunk by length and snapped to energy dips.
-Usage: transcribe_local.py <media> <whisperModelDir> <out.json|-> [language]"""
+Usage: transcribe_local.py <media> <whisperModelDir> <out.json|-> [language|auto]"""
 import json, re, subprocess, sys, wave, os
 import numpy as np
 import sherpa_onnx
 
 src, model_dir, out = sys.argv[1], sys.argv[2], sys.argv[3]
-lang = sys.argv[4] if len(sys.argv) > 4 else "en"
+lang = sys.argv[4] if len(sys.argv) > 4 else "auto"
+if lang == "auto":
+    lang = ""  # sherpa-onnx Whisper detects the language when this is empty
 import tempfile
 wav = tempfile.mktemp(suffix=".wav")
 subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-ac", "1", "-ar", "16000", "-f", "wav", wav], check=True)

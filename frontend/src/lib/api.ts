@@ -89,6 +89,35 @@ export interface Analysis {
 
 export interface BrollAnalysis { duration: number; width?: number; height?: number; hasVideo: boolean; calm: CalmSample[]; faces?: FaceSample[] }
 
-export const startAnalysis = (id: string) => post<{ jobId: string; steps: string[] }>('/api/analyze', { id });
+/** Deletes an upload on the server (best effort: a missing file is fine). */
+export const deleteMedia = (id: string) => fetch(`/api/media/${id}`, { method: 'DELETE', headers: keyHeaders() }).then(() => undefined, () => undefined);
+
+export const startAnalysis = (id: string, language = 'auto') => post<{ jobId: string; steps: string[] }>('/api/analyze', { id, language });
 export const startBrollAnalysis = (id: string) => post<{ jobId: string; steps: string[] }>('/api/analyze', { id, light: true });
 export const startExport = (body: unknown) => post<{ jobId: string; steps: string[] }>('/api/export', body);
+
+export interface StockClip { id: string; url: string; name: string; duration: number; width?: number; height?: number; credit: string; pexelsId: number }
+/** Finds and stores a stock B-roll clip on the server. Errors carry the server's code ('no-key', 'not-found', 'failed'). */
+export async function fetchStock(body: { query: string; orientation: 'portrait' | 'landscape' | 'square'; minDuration: number; exclude: number[] }): Promise<StockClip> {
+  const res = await fetch('/api/stock', { method: 'POST', headers: { 'content-type': 'application/json', ...keyHeaders() }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(json.error ?? 'Stock search failed.'), { code: json.code ?? 'failed' });
+  return json as StockClip;
+}
+
+/** AI image cutaway, stored on the server. Errors carry 'no-key', 'refused' or 'failed'. */
+export async function generateImage(body: { prompt: string; shape: 'portrait' | 'landscape' | 'square'; label: string }): Promise<{ id: string; url: string; name: string; width: number; height: number }> {
+  const res = await fetch('/api/generate-image', { method: 'POST', headers: { 'content-type': 'application/json', ...keyHeaders() }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(json.error ?? 'Image generation failed.'), { code: json.code ?? 'failed' });
+  return json;
+}
+
+/** What this server can make on its own: stock footage (Pexels key) and AI images (image API key). */
+export async function serverCaps(): Promise<{ stock: boolean; images: boolean }> {
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store', headers: keyHeaders() });
+    const j = await r.json();
+    return { stock: !!j.stock, images: !!j.images };
+  } catch { return { stock: false, images: false }; }
+}

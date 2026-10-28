@@ -42,6 +42,11 @@ clips = body['clips']
 by_id = {c['id']: c for c in clips}
 
 
+def gain(c):
+    db = c.get('gainDb') or 0
+    return 0.0 if db <= -60 else 10 ** (db / 20)
+
+
 def fr(t):
     return round(t * FPS)
 
@@ -67,7 +72,14 @@ def encode(pngs, out, opaque=False):
     tmp = out + '.seq'
     os.makedirs(tmp, exist_ok=True)
     for k, p in enumerate(pngs):
-        os.symlink(os.path.abspath(p), f'{tmp}/{k:06d}.png')
+        dst = f'{tmp}/{k:06d}.png'
+        try:
+            os.symlink(os.path.abspath(p), dst)
+        except OSError:  # Windows without symlink rights: hard link, else copy
+            try:
+                os.link(os.path.abspath(p), dst)
+            except OSError:
+                shutil.copy(p, dst)
     codec = ['-c:v', 'libx264', '-crf', '14', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'] if opaque else ['-c:v', 'qtrle', '-pix_fmt', 'argb']
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', str(FPS), '-i', f'{tmp}/%06d.png'] + codec + [out], check=True)
     shutil.rmtree(tmp)
@@ -126,11 +138,11 @@ for i, c in enumerate(arolls):
     if assets.get(c.get('assetId', ''), {}).get('audioOnly'):
         files[fk]['kind'] = 'audio'
         files[fk]['audio'] = True
-        vo.append(dict(name=f'Voiceover {i + 1}', file=fk, start=start, end=end, inp=fr(c['in']), out=fr(c['in']) + end - start))
+        vo.append(dict(name=f'Voiceover {i + 1}', file=fk, start=start, end=end, inp=fr(c['in']), out=fr(c['in']) + end - start, gain=gain(c)))
         continue
     fill = max(W / files[fk]['w'], H / files[fk]['h'])  # scale to fill the sequence frame
     s *= fill
-    item = dict(name=f"Shot {i + 1}", file=fk, start=start, end=end, inp=fr(c['in']), out=fr(c['in']) + end - start, scale=s * 100, punch=s / fill, kf=None)
+    item = dict(name=f"Shot {i + 1}", file=fk, start=start, end=end, inp=fr(c['in']), out=fr(c['in']) + end - start, scale=s * 100, punch=s / fill, kf=None, gain=gain(c))
     if i == 0 and look.get('introSettle') and fr(c['in']) == 0:
         # Opening settle (shot 1 starts at media frame 0, so keyframe times are unambiguous): 116% -> 100%.
         kf = []
@@ -220,8 +232,8 @@ print('caption clips', len(cap_items))
 
 # Graphics: one clip each, grouped by layer kind so each kind gets its own track(s).
 # Stills (plate, film look) are PNGs held for the clip's length.
-ORDER = ['t-plate', 't-look', 't-overlay', 't-labels', 't-setup', 't-key']
-KIND_NAME = {'t-plate': 'Background', 't-look': 'Look', 't-overlay': 'Graphic', 't-labels': 'Labels', 't-setup': 'Setup', 't-key': 'Key'}
+ORDER = ['t-plate', 't-broll', 't-look', 't-overlay', 't-labels', 't-setup', 't-key']
+KIND_NAME = {'t-plate': 'Background', 't-broll': 'Motion', 't-look': 'Look', 't-overlay': 'Graphic', 't-labels': 'Labels', 't-setup': 'Setup', 't-key': 'Key'}
 by_track = {k: [] for k in ORDER}
 for m in manifest:
     if m['name'] == 'captions':
@@ -240,7 +252,7 @@ for m in manifest:
         files[cid]['still'] = True
         item = dict(name=f"{KIND_NAME.get(track, 'Layer')}: {c['label']}"[:60], file=cid, start=m['from'], end=end, inp=0, out=end - m['from'], scale=100, kf=None)
     else:
-        opaque = ((c.get('graphic') or {}).get('ui')) == 'pages'  # full-frame scene: no alpha needed
+        opaque = ((c.get('graphic') or {}).get('ui')) == 'pages' or track == 't-broll'  # full-frame scene: no alpha needed
         fname = f"{len(files):02d}_{prefix}_{safe}.{'mp4' if opaque else 'mov'}"
         print('layer', fname, len(pngs), flush=True)
         encode(pngs, f'{out_dir}/graphics/{fname}', opaque)
@@ -271,10 +283,11 @@ for i, it in enumerate(v1):
         continue
     it['dl'] = len(dialog_l)
     for ch, tr in ((1, dialog_l), (2, dialog_r)):
-        tr.append(dict(name=it['name'], file=it['file'], start=it['start'], end=it['end'], inp=it['inp'], out=it['out'], ch=ch, level=None, link=i))
+        g = it.get('gain', 1)
+        tr.append(dict(name=it['name'], file=it['file'], start=it['start'], end=it['end'], inp=it['inp'], out=it['out'], ch=ch, level=None if g == 1 else round(g, 4), link=i))
 for it in vo:
     for ch, tr in ((1, dialog_l), (2, dialog_r)):
-        tr.append(dict(name=it['name'], file=it['file'], start=it['start'], end=it['end'], inp=it['inp'], out=it['out'], ch=ch, level=None, link=None))
+        tr.append(dict(name=it['name'], file=it['file'], start=it['start'], end=it['end'], inp=it['inp'], out=it['out'], ch=ch, level=None if it['gain'] == 1 else round(it['gain'], 4), link=None))
 audio_tracks += [dialog_l, dialog_r]
 # Music beds.
 music_tracks = []
@@ -284,7 +297,7 @@ for c in sorted([c for c in clips if c['trackId'] == 't-music'], key=lambda c: c
         continue
     start, end = fr(c['start']), fr(c['start'] + c['duration'])
     inp = fr(c.get('in', 0))
-    place(music_tracks, dict(name=c.get('label') or 'Music', file=fk, start=start, end=end, inp=inp, out=inp + end - start, ch=1, level=c.get('volume', 0.35), link=None))
+    place(music_tracks, dict(name=c.get('label') or 'Music', file=fk, start=start, end=end, inp=inp, out=inp + end - start, ch=1, level=round(c.get('volume', 0.35) * gain(c), 4), link=None))
 audio_tracks += music_tracks
 used = set()
 sfx_tracks = []
@@ -302,7 +315,7 @@ for c in sorted([c for c in clips if c['trackId'] == 't-sfx'], key=lambda c: c['
     length = min(n, max(1, fr(c['duration'])) if c['duration'] < n / FPS else n)
     # Whole file plays in the MP4 render (Remotion plays the full sound), so use the whole file.
     length = min(n, TOTAL - start)
-    place(sfx_tracks, dict(name=c['label'], file='sfx:' + f, start=start, end=start + length, inp=0, out=length, ch=1, level=SFX_VOLUME[f], link=None))
+    place(sfx_tracks, dict(name=c['label'], file='sfx:' + f, start=start, end=start + length, inp=0, out=length, ch=1, level=round(SFX_VOLUME[f] * gain(c), 4), link=None))
 audio_tracks += sfx_tracks
 
 # ---- XML ----------------------------------------------------------------------------------

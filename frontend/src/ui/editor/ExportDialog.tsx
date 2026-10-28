@@ -1,4 +1,5 @@
 'use client';
+import { playableClips } from '@shared/util';
 import { useEffect, useRef, useState } from 'react';
 import { online, startExport, waitForJob } from '../../lib/api';
 import type { Word } from '@shared/types';
@@ -105,7 +106,7 @@ export function ExportDialog() {
     const burn = captions === 'Burned in' || captions === 'Both';
     try {
       const { jobId } = await startExport({
-        title: project.title, aspect: project.aspect, clips: s.clips, assets: s.assets, words: s.words,
+        title: project.title, aspect: project.aspect, clips: playableClips(s.clips, s.tracks), assets: s.assets, words: s.words,
         captions: { ...s.captions, enabled: s.captions.enabled && burn }, look: s.look,
         format, res, fps: Number(fps), quality, range: range === 'sel' && selection ? selection : null, duration: total,
         ...(isPremiere ? { folder } : {}),
@@ -131,7 +132,7 @@ export function ExportDialog() {
     <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="exp-title" onMouseDown={(e) => e.target === e.currentTarget && phase !== 'rendering' && close()}>
       <div className="dialog" style={{ width: 'min(680px, 100%)' }}>
         <div className="dialog-head">
-          <h2 id="exp-title">{phase === 'settings' ? 'Export video' : phase === 'rendering' ? 'Exporting…' : 'Export ready'}</h2>
+          <h2 id="exp-title">{phase === 'settings' ? <>Export <em>your cut</em></> : phase === 'rendering' ? <>Exporting<em>…</em></> : <>Your export <em>is ready.</em></>}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close"><I.X /></button>
         </div>
 

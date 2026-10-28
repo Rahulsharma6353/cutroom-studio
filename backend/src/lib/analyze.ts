@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { MODELS, SCRIPTS } from './paths';
+import { MODELS, SCRIPTS, PYTHON } from './paths';
 import type { CalmSample, FaceSample, Pause, Word } from '@shared/types';
 import { detectSilence, extractAudio, makeProxy, probe } from './ffmpeg';
 import { enqueue } from './jobs';
@@ -29,7 +29,7 @@ export interface BrollAnalysis { duration: number; width?: number; height?: numb
 /** Where the footage is busy or calm (scripts/calm_map.py). Optional: empty means text uses default spots. */
 function calmMap(file: string): Promise<CalmSample[]> {
   return new Promise((resolve) => {
-    const p = spawn(process.env.PYTHON_PATH || 'python3', [path.join(SCRIPTS, 'calm_map.py'), file, '-', '0.5'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const p = spawn(PYTHON, [path.join(SCRIPTS, 'calm_map.py'), file, '-', '0.5'], { stdio: ['ignore', 'pipe', 'ignore'] });
     let out = '';
     p.stdout.on('data', (d) => (out += d));
     p.on('error', () => resolve([]));
@@ -48,7 +48,7 @@ const YUNET = path.join(MODELS, 'face_detection_yunet_2023mar.onnx');
  */
 function trackFaces(file: string): Promise<FaceSample[]> {
   return new Promise((resolve) => {
-    const py = process.env.PYTHON_PATH || 'python3';
+    const py = PYTHON;
     const args = existsSync(YUNET)
       ? [path.join(SCRIPTS, 'faces_yunet.py'), file, YUNET, '-', '2']
       : [path.join(SCRIPTS, 'faces.py'), file, '0.25'];
@@ -68,7 +68,7 @@ function trackFaces(file: string): Promise<FaceSample[]> {
 
 export const ANALYZE_STEPS = ['Reading footage', 'Making a preview copy', 'Finding pauses and your face', 'Transcribing speech'];
 
-export async function startAnalysis(id: string) {
+export async function startAnalysis(id: string, language?: string) {
   const meta = await readMeta(id);
   if (!meta) throw new Error('not found');
 
@@ -104,7 +104,7 @@ export async function startAnalysis(id: string) {
     let transcript: Analysis['transcript'] = 'none';
     if (p.hasAudio && sttConfigured()) {
       try {
-        words = (await transcribe(mediaPath(id, 'audio'))) ?? [];
+        words = (await transcribe(mediaPath(id, 'audio'), language)) ?? [];
         transcript = 'speech';
       } catch (err) {
         console.error('[stt]', err);

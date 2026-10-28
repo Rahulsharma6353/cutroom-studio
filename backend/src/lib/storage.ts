@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -59,6 +59,13 @@ export async function saveUpload(body: ReadableStream<Uint8Array>, meta: Omit<Me
   const full: MediaMeta = { ...meta, id, size, createdAt: new Date().toISOString() };
   await writeMeta(full);
   return full;
+}
+
+/** Remove an upload and everything made from it (proxy, audio). */
+export async function deleteMedia(id: string): Promise<boolean> {
+  if (!validId(id)) return false;
+  await rm(path.join(MEDIA, id), { recursive: true, force: true });
+  return true;
 }
 
 export async function readMeta(id: string): Promise<MediaMeta | null> {

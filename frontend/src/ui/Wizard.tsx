@@ -16,6 +16,14 @@ const RATIOS: { id: AspectRatio; label: string; w: number; h: number }[] = [
   { id: '16:9', label: 'YouTube', w: 30, h: 17 },
 ];
 const LENGTHS = ['30 s', '45 s', '60 s', '90 s', 'Keep all'];
+/** Spoken language for captions. Auto works for most takes; picking one helps mixed or accented speech. */
+const LANGUAGES: { id: string; label: string }[] = [
+  { id: 'auto', label: 'Detect automatically' }, { id: 'en', label: 'English' }, { id: 'hi', label: 'Hindi' },
+  { id: 'gu', label: 'Gujarati' }, { id: 'mr', label: 'Marathi' }, { id: 'bn', label: 'Bengali' }, { id: 'ta', label: 'Tamil' },
+  { id: 'te', label: 'Telugu' }, { id: 'kn', label: 'Kannada' }, { id: 'ml', label: 'Malayalam' }, { id: 'pa', label: 'Punjabi' },
+  { id: 'ur', label: 'Urdu' }, { id: 'es', label: 'Spanish' }, { id: 'fr', label: 'French' }, { id: 'de', label: 'German' },
+  { id: 'pt', label: 'Portuguese' }, { id: 'ar', label: 'Arabic' }, { id: 'ja', label: 'Japanese' }, { id: 'ko', label: 'Korean' }, { id: 'zh', label: 'Chinese' },
+];
 const KINDS: { kind: AssetKind; label: string; hint: string; color: string; accept: string }[] = [
   { kind: 'aroll', label: 'A-roll', hint: 'You talking to camera, or a voiceover. The cut is built around this.', color: 'var(--aroll)', accept: 'video/*,audio/*' },
   { kind: 'broll', label: 'B-roll', hint: 'Cutaways, screen recordings, product shots', color: 'var(--broll)', accept: 'video/*,image/*' },
@@ -37,6 +45,7 @@ export function Wizard() {
   const [title, setTitle] = useState(() => nameOf(presetFiles.find((f) => f.kind === 'aroll')?.name ?? ''));
   const [aspect, setAspect] = useState<AspectRatio>('source');
   const [length, setLength] = useState('45 s');
+  const [language, setLanguage] = useState('auto');
   const [brief, setBrief] = useState('');
   const [over, setOver] = useState<AssetKind | null>(null);
   const [style, setStyle] = useState<string>('');
@@ -64,13 +73,13 @@ export function Wizard() {
   const remove = (f: UploadedFile) => setFiles((all) => all.filter((x) => x !== f));
 
   const hasAroll = files.some((f) => f.kind === 'aroll');
-  const start = () => create({ templateId: style || undefined, title: title.trim() || 'Untitled video', aspect, brief: [brief.trim(), length !== 'Keep all' ? `keep it under ${length.replace(' s', ' seconds')}` : ''].filter(Boolean).join('. '), files });
+  const start = () => create({ language, templateId: style || undefined, title: title.trim() || 'Untitled video', aspect, brief: [brief.trim(), length !== 'Keep all' ? `keep it under ${length.replace(' s', ' seconds')}` : ''].filter(Boolean).join('. '), files });
 
   return (
     <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="wiz-title" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="dialog sheet">
         <div className="dialog-head">
-          <h2 id="wiz-title">New video</h2>
+          <h2 id="wiz-title">New <em>video</em></h2>
           <button className="icon-btn" onClick={close} aria-label="Close"><I.X /></button>
         </div>
 
@@ -139,6 +148,12 @@ export function Wizard() {
                 ))}
               </div>
             </div>
+            <label className="field">
+              <span>Spoken language</span>
+              <select className="input" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+              </select>
+            </label>
             <div className="field">
               <span>Length</span>
               <div className="seg" role="group" aria-label="Length">

@@ -8,3 +8,6 @@ export const SHARED_SRC = path.join(SHARED_ROOT, 'src');
 export const ASSETS = path.join(SHARED_ROOT, 'assets');
 export const SCRIPTS = path.join(BACKEND_ROOT, 'scripts');
 export const MODELS = path.join(BACKEND_ROOT, 'models');
+/** Python for the helpers (faces, calm map, local Whisper, Premiere packager). On Windows the
+ *  command is `python` (`python3` there is usually the Microsoft Store shortcut, which never runs). */
+export const PYTHON = process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');

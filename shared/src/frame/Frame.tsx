@@ -3,6 +3,7 @@ import { TRACK_IDS } from '../ops';
 import { DEFAULT_LOOK } from '../sample';
 import type { Asset, CaptionSettings, Clip, FaceSample, GraphicSpec, Job, Look, Word } from '../types';
 import { PagesScene, UICard } from './UICard';
+import { MotionScene } from './Motion';
 import { swatch } from '../util';
 import { Person } from './Thumb';
 import { pixelWidth } from './pixelMetrics';
@@ -262,8 +263,8 @@ export function Frame({ t, clips, assets, words, captions, look = DEFAULT_LOOK, 
           <ARoll clip={a} asset={asset(a)} t={t} renderMedia={renderMedia} cam={cam} />
         </div>
       )}
-      {showBase && b && (
-        <div className="layer" style={{ filter: GRADE[look.brollGrade ?? look.grade], bottom: split ? '50%' : 0 }}>
+      {b && (showBase || (layer === 'graphics' && onlyClip === b.id && b.graphic?.component === 'Motion')) && (
+        <div className="layer" style={{ filter: b.graphic?.component === 'Motion' ? undefined : GRADE[look.brollGrade ?? look.grade], bottom: split ? '50%' : 0 }}>
           <BRoll clip={b} asset={asset(b)} job={job(b)} t={t} renderMedia={renderMedia} look={look} />
         </div>
       )}
@@ -320,9 +321,16 @@ function Pending({ job, label }: { job?: Job; label: string }) {
   );
 }
 
-function BRollContent({ clip, asset, job, t, renderMedia }: { clip: Clip; asset?: Asset; job?: Job; t: number; renderMedia: RenderMedia }) {
+function BRollContent({ clip, asset, job, t, renderMedia, look }: { clip: Clip; asset?: Asset; job?: Job; t: number; renderMedia: RenderMedia; look: Look }) {
+  if (clip.graphic?.component === 'Motion') return <MotionScene g={clip.graphic} look={look} age={t - clip.start} dur={clip.duration} />;
   if (clip.status !== 'ready') return <Pending job={job} label={clip.label} />;
-  if (asset?.url && asset.kind !== 'music') return <>{renderMedia(isImage(asset) ? 'image' : 'broll', asset, clip.in + (t - clip.start), clip)}</>;
+  if (asset?.url && asset.kind !== 'music' && isImage(asset)) {
+    // A still cutaway (generated image) drifts in slowly, so it reads as a shot, not a slide.
+    const k = Math.max(0, Math.min(1, (t - clip.start) / Math.max(0.5, clip.duration)));
+    const pan = (clip.hue % 2 ? 1 : -1) * 2.2 * k;
+    return <div className="layer" style={{ overflow: 'hidden' }}><div className="layer" style={{ transform: `scale(${(1.04 + 0.09 * k).toFixed(4)}) translateX(${pan.toFixed(3)}%)` }}>{renderMedia('image', asset, clip.in + (t - clip.start), clip)}</div></div>;
+  }
+  if (asset?.url && asset.kind !== 'music') return <>{renderMedia('broll', asset, clip.in + (t - clip.start), clip)}</>;
   const screen = asset?.kind === 'screen';
   return (
     <div className="layer" style={{ background: swatch(clip.hue, 60) }}>
